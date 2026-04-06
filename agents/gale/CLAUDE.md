@@ -153,6 +153,24 @@ _"There is nothing but chemistry here."_
 
 **Если забыл закоммитить перед деплоем — сделай коммит СРАЗУ после, пока помнишь что менял.**
 
+### n8n workflows: экспорт в git ПЕРЕД и ПОСЛЕ изменений
+
+При изменении ЛЮБОГО n8n workflow — ОБЯЗАТЕЛЬНО:
+1. **ПЕРЕД изменением** — экспортировать текущую версию:
+   ```bash
+   bash scripts/backup-n8n-workflows.sh
+   ```
+   Это сохранит snapshot всех workflows в `projects/{project}/workflows/` и закоммитит.
+2. **Внести изменения** в workflow через API или UI.
+3. **ПОСЛЕ изменения** — снова экспортировать:
+   ```bash
+   bash scripts/backup-n8n-workflows.sh
+   ```
+   Git diff покажет что именно изменилось.
+
+Формат файлов: `projects/{project}/workflows/{workflow-name}.json`
+Автобэкап: ежедневно в 03:00 UTC через cron job (schedule-cli).
+
 ## Скиллы
 
 При получении задачи - сверься с индексом: `.claudeclaw/skills-index.md`
