@@ -58,7 +58,7 @@ BASE_URL="http://localhost:${DASHBOARD_PORT}"
 # ── Parallel mode ──
 if [ "${1:-}" = "--parallel" ]; then
   TASKS_JSON="${2:-}"
-  TIMEOUT_MS="${3:-600000}"
+  TIMEOUT_MS="${3:-1800000}"
 
   if [ -z "$TASKS_JSON" ]; then
     echo "Usage: delegate-to-agent.sh --parallel '<json_tasks>' [timeout_ms]" >&2
@@ -100,7 +100,7 @@ fi
 # ── Single agent mode ──
 AGENT_ID="${1:-}"
 PROMPT="${2:-}"
-TIMEOUT_MS="${3:-600000}"
+TIMEOUT_MS="${3:-1800000}"
 
 if [ -z "$AGENT_ID" ] || [ -z "$PROMPT" ]; then
   echo "Usage: delegate-to-agent.sh <agent_id> \"prompt\" [timeout_ms]" >&2
@@ -112,11 +112,45 @@ fi
 
 # Validate agent_id
 case "$AGENT_ID" in
-  tuco|lalo|gale|kim) ;; # known agents
+  tuco|lalo|gale|kim|olaf|rob|freddie) ;; # known agents
   *)
     echo "WARNING: Agent '$AGENT_ID' may not exist. Known: tuco, lalo, gale, kim" >&2
     ;;
 esac
+
+# ── Duplicate delegation guard ──
+# Check if this agent already has an active task in the last 10 minutes.
+# Warns the coordinator to avoid wasting tokens on duplicate/rephrased delegations.
+DB_PATH="$SCRIPT_DIR/../store/claudeclaw.db"
+if [ -f "$DB_PATH" ]; then
+  ACTIVE_TASK=$(sqlite3 "$DB_PATH" "
+    SELECT id, substr(prompt, 1, 120), status, created_at
+    FROM inter_agent_tasks
+    WHERE to_agent = '$AGENT_ID'
+      AND status IN ('pending', 'accepted', 'in_progress')
+      AND created_at >= datetime('now', '-10 minutes')
+    ORDER BY created_at DESC
+    LIMIT 1;
+  " 2>/dev/null)
+
+  if [ -n "$ACTIVE_TASK" ]; then
+    # Parse fields (sqlite3 default separator is |)
+    TASK_ID=$(echo "$ACTIVE_TASK" | cut -d'|' -f1)
+    TASK_PROMPT=$(echo "$ACTIVE_TASK" | cut -d'|' -f2)
+    TASK_STATUS=$(echo "$ACTIVE_TASK" | cut -d'|' -f3)
+    TASK_TIME=$(echo "$ACTIVE_TASK" | cut -d'|' -f4)
+
+    echo "" >&2
+    echo "⚠️  WARNING: DUPLICATE DELEGATION DETECTED" >&2
+    echo "   Agent '$AGENT_ID' already has an active task (status: $TASK_STATUS, started: $TASK_TIME):" >&2
+    echo "   \"$TASK_PROMPT...\"" >&2
+    echo "   Task ID: $TASK_ID" >&2
+    echo "" >&2
+    echo "   Sending the same task again wastes tokens. WAIT for the current task to finish." >&2
+    echo "   If you are CERTAIN this is a different task, the delegation will proceed anyway." >&2
+    echo "" >&2
+  fi
+fi
 
 # ── Resolve agent-specific dashboard port ──
 resolve_agent_port() {
