@@ -97,7 +97,7 @@ export interface AgentInfo {
 let agentRegistry: AgentInfo[] = [];
 
 /** Default timeout for a delegated task (10 minutes). */
-const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
+const DEFAULT_TIMEOUT_MS = 30 * 60 * 1000;
 
 /**
  * Initialize the orchestrator by scanning `agents/` for valid configs.
@@ -285,7 +285,7 @@ export async function delegateToAgent(
     void sendAsAgent(
       agentConfig.botToken,
       chatId,
-      `👋 Принял задачу от ${senderName}: ${taskPreview}`,
+      `👋 Task received from ${senderName}: ${taskPreview}`,
     );
   }
 
@@ -309,16 +309,22 @@ export async function delegateToAgent(
       if (agentConfig.botToken) {
         const senderName = fromAgent === 'main' ? 'Начо' : fromAgent;
         void sendAsAgent(agentConfig.botToken, chatId,
-          `✅ Задача выполнена! Отправляю результат → ${senderName}`);
+          `✅ Task completed! Sending result → ${senderName}`);
       }
       return { agentId, text: remoteResult.text, usage: remoteResult.usage, taskId, durationMs };
     } catch (err) {
-      logger.warn({ agentId, err: err instanceof Error ? err.message : String(err) },
-        'Remote delegation failed, falling back to in-process');
+      logger.error({ agentId, err: err instanceof Error ? err.message : String(err) },
+        'Remote delegation failed — NO FALLBACK');
+      completeInterAgentTask(taskId, 'failed', `Remote delegation failed: ${err instanceof Error ? err.message : String(err)}`);
+      return { agentId, taskId, text: `ERROR: Could not reach agent ${agentId} on port ${agentConfig.dashboardPort}. No fallback.`, durationMs: Date.now() - start, usage: { inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0, totalCostUsd: 0, didCompact: false, preCompactTokens: null, lastCallCacheRead: 0, lastCallInputTokens: 0 } };
     }
+  } else if (AGENT_ID !== agentId) {
+    // No dashboard port and not self — cannot delegate
+    completeInterAgentTask(taskId, 'failed', 'Agent has no dashboard port configured');
+    return { agentId, taskId, text: `ERROR: Agent ${agentId} has no dashboard port configured.`, durationMs: Date.now() - start, usage: { inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0, totalCostUsd: 0, didCompact: false, preCompactTokens: null, lastCallCacheRead: 0, lastCallInputTokens: 0 } };
   }
 
-  // ── Fallback: in-process execution ──
+  // ── Fallback: in-process execution (ONLY for self-delegation) ──
 
   // ── Intermediate progress updates (60s rule) ──
   // Notify boss every 60s that agent is still working. Prevents "silent work" anxiety.
@@ -400,7 +406,7 @@ export async function delegateToAgent(
         void sendAsAgent(
           agentConfig.botToken,
           chatId,
-          `✅ Задача выполнена! Отправляю результат → ${senderName}`,
+          `✅ Task completed! Sending result → ${senderName}`,
         );
       }
 
@@ -469,7 +475,7 @@ export async function reportToCoordinator(
   // Send via main bot's Telegram
   const mainBotToken = TELEGRAM_BOT_TOKEN;
   if (mainBotToken) {
-    const text = `${emoji} Отчёт от ${agentName}:\n\n${message}`;
+    const text = `${emoji} Report from ${agentName}:\n\n${message}`;
     await sendAsAgent(mainBotToken, chatId, text);
   }
 
@@ -547,7 +553,7 @@ export async function delegateToMultiple(
 
   const succeeded = results.filter((r) => !r.error).length;
   const failed = results.filter((r) => r.error).length;
-  onProgress?.(`🔀 Параллельная делегация завершена: ${succeeded} успешно, ${failed} ошибок`);
+  onProgress?.(`🔀 Parallel delegation completed: ${succeeded} succeeded, ${failed} errors`);
 
   return results;
 }
@@ -612,7 +618,7 @@ export async function runChain(
           logger.warn({ chainId, step: i + 1, attempt: attempt + 1, agent: step.agent_id }, 'Retrying failed chain step');
           await reportToCoordinator(
             'main',
-            `🔁 Цепочка "${chainName}": повтор шага ${i + 1} (${step.agent_id}), попытка ${attempt + 1}`,
+            `🔁 Chain "${chainName}": повтор шага ${i + 1} (${step.agent_id}), попытка ${attempt + 1}`,
             'alert',
           );
         }
@@ -653,7 +659,7 @@ export async function runChain(
 
       await reportToCoordinator(
         'main',
-        `Цепочка "${chainName}" упала на шаге ${i + 1} (${step.agent_id}) после ${MAX_RETRIES + 1} попыток: ${errMsg.slice(0, 200)}`,
+        `Chain "${chainName}" упала на шаге ${i + 1} (${step.agent_id}) после ${MAX_RETRIES + 1} попыток: ${errMsg.slice(0, 200)}`,
         'alert',
       );
       throw lastErr;
@@ -677,7 +683,7 @@ export async function runChain(
   // Report success
   await reportToCoordinator(
     'main',
-    `Цепочка "${chainName}" выполнена.\n\nРезультат:\n${prevResult.slice(0, 500)}`,
+    `Chain "${chainName}" completed.\n\nResult:\n${prevResult.slice(0, 500)}`,
     'result',
   );
 

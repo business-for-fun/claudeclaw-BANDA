@@ -43,8 +43,8 @@ This applies to ALL tasks — coding, research, content, infrastructure, analysi
 ## Routing Table
 | Task type | Agent | Specialization |
 |---|---|---|
-| Backend code, n8n, algorithm, API | **gale** | Opus, programmer |
-| Frontend, React, UI, Firebase deploy | **freddie** | Sonnet, frontend dev |
+| Backend + Frontend code, algorithm, API, n8n | **gale** | Opus, programmer |
+| Build, deploy, Firebase hosting, Error Boundaries | **freddie** | Sonnet, frontend dev |
 | QA, testing, Playwright, verification | **kim** | Sonnet, quality |
 | Infrastructure, Docker, SSH, servers | **olaf** | Sonnet, ops |
 | Research, analysis, market, business plan | **rob** | Haiku, analyst |
@@ -53,12 +53,12 @@ This applies to ALL tasks — coding, research, content, infrastructure, analysi
 
 ## Workflow Templates
 
-### Bug fix (R4G or any project with deploy)
-1. Determine: backend or frontend
-2. `bash scripts/delegate-to-agent.sh gale/freddie "fix: <description>"`
-3. `bash scripts/delegate-to-agent.sh freddie "build and deploy"`
-4. `bash scripts/delegate-to-agent.sh kim "test on live site"`
-5. Report to user
+### Code fix workflow
+1. `bash scripts/delegate-to-agent.sh gale "fix: <description>. Git commit."`
+2. `bash scripts/delegate-to-agent.sh freddie "build and deploy: <what Gale changed>."`
+3. `bash scripts/delegate-to-agent.sh kim "verify fix on live site: <handoff from Gale>. Run ALL regression tests."`
+4. Kim ✅ → report to user
+5. Kim ❌ → `bash scripts/delegate-to-agent.sh gale "regression fix: <Kim's report>"` → repeat from step 1
 
 ### Research / Analysis (FAM, any project)
 1. `bash scripts/delegate-to-agent.sh rob "research: <topic>"`
@@ -125,6 +125,31 @@ NEVER leave the user hanging. The result is available — share it.
 
 ## File Structure
 Project files: `projects/r4g/`, `projects/limo/`, `projects/fam/` (lowercase)
+
+## QA & Testing Policy
+- **Kim владеет базой тестов.** Каждый баг = новый тест. База только растёт.
+- **Regression suite:** Kim прогоняет ВСЕ тесты после каждого фикса, не только новый.
+- **Jest тесты:** `projects/r4g/frontend/__tests__/` — unit тесты netting алгоритма (16+ кейсов).
+- **Перед работой:** агент ОБЯЗАН прочитать `projects/r4g/ARCHITECTURE.md` и `projects/r4g/PROTECTED_FILES.md`.
+- **Git commit обязателен** перед каждым деплоем. Без коммита — не деплоить.
+- **Error Boundaries:** на каждом табе React, белый экран недопустим.
+
+## Automated Jobs (cron)
+- **02:00 UTC** — R4G Jest nightly tests → алерт в Telegram (Alex DM + R4G_Dev_Claude)
+- **03:00 UTC** — n8n workflow backup → git commit
+- Скрипты: `scripts/run-r4g-tests.sh`, `scripts/backup-n8n-workflows.sh`
+
+## Rollback Protocol
+1. Kim smoke tests fail → Олаф откатывает Firebase (`firebase hosting:rollback`)
+2. Kim проверяет откатанную версию
+3. Алерт в Telegram
+4. Gale чинит → Freddie deploy → Kim повторно
+
+## Infrastructure
+- **Olaf service account:** `olaf-infra@business-for-fun-landing.iam.gserviceaccount.com`
+- GCP Organization: business-for-fun.com (ID: 180434074994)
+- FAM-sites project: meta-century-487321-e1 (Firebase Hosting настроен)
+- n8n серверы (internal): R4G=10.128.0.5, LIMO=10.128.0.7, FAM=10.128.0.3
 
 ## Sending Files via Telegram
 ```bash

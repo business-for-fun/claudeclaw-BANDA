@@ -58,3 +58,10 @@ scripts/waste-reminder.sh
 # Build artifacts (dotnet)
 **/bin/
 **/obj/
+
+# Service account keys and secrets — NEVER commit
+secrets/
+
+# Large files - Google Cloud SDK
+*.tar.gz
+google-cloud-sdk/

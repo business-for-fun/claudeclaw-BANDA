@@ -18,9 +18,8 @@ if [ -f "$PROJECT_ROOT/.env" ]; then
   set +a
 fi
 
-# Prefer Gale's bot token for nightly reports; fall back to main bot
-BOT_TOKEN="${GALE_BOT_TOKEN:-$TELEGRAM_BOT_TOKEN}"
-CHAT_ID="6655962301"
+# All notifications via main ClaudeClaw bot
+BOT_TOKEN="$TELEGRAM_BOT_TOKEN"
 
 # ── Paths ───────────────────────────────────────────────────────
 FRONTEND_DIR="$PROJECT_ROOT/projects/r4g/frontend"
@@ -59,11 +58,14 @@ TESTS_TOTAL="$(echo "$SUMMARY_LINE" | grep -oP '\d+ total' | grep -oP '\d+' || e
 # ── Send Telegram notification ──────────────────────────────────
 send_telegram() {
   local message="$1"
-  curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
-    -d "chat_id=${CHAT_ID}" \
-    -d "text=${message}" \
-    -d "parse_mode=HTML" \
-    > /dev/null 2>&1
+  # Alex DM + R4G_Dev_Claude group — both via ClaudeClaw bot
+  for cid in 6655962301 -1003599340365; do
+    curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+      -d "chat_id=${cid}" \
+      -d "text=${message}" \
+      -d "parse_mode=HTML" \
+      > /dev/null 2>&1
+  done
 }
 
 if [ "$TEST_EXIT" -eq 0 ]; then

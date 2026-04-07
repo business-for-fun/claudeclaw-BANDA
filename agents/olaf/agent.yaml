@@ -1,0 +1,8 @@
+name: Olaf
+description: Infrastructure engineer — Docker, SSH, servers, deploy, monitoring, systemd, networking
+
+telegram_bot_token_env: OLAF_BOT_TOKEN
+
+model: claude-sonnet-4-20250514
+
+dashboard_port: 3147

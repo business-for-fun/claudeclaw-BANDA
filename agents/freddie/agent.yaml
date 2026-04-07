@@ -1,0 +1,8 @@
+name: Freddie
+description: Frontend developer — React, Vite, Tailwind, Firebase deploy, image generation, landing pages
+
+telegram_bot_token_env: FREDDIE_BOT_TOKEN
+
+model: claude-sonnet-4-20250514
+
+dashboard_port: 3149

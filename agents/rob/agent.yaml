@@ -1,0 +1,8 @@
+name: Rob
+description: Researcher & analyst — market research, competitor analysis, technical reviews, business plans, document generation
+
+telegram_bot_token_env: ROB_BOT_TOKEN
+
+model: claude-haiku-4-5
+
+dashboard_port: 3148
