@@ -152,6 +152,69 @@ if [ -f "$DB_PATH" ]; then
   fi
 fi
 
+# ── R4G Workflow Enforcement ──
+# Ensures strict Gale → Freddie → Kim sequence for R4G project tasks.
+# Blocks out-of-order delegations and enforces git commit + push before deploy.
+R4G_DIR="$SCRIPT_DIR/../projects/r4g"
+
+is_r4g_task() {
+  echo "$PROMPT" | grep -qiE "r4g|netting|frontend|firebase|business-for-fun|Bug #[0-9]|ML Chain|Missing Link|SWAP|broker console|NettingResults|BrokerConsole|Settings\.jsx|App\.jsx"
+}
+
+if is_r4g_task && [ -f "$DB_PATH" ]; then
+  case "$AGENT_ID" in
+    freddie|olaf)
+      # RULE 1: Cannot deploy without Gale's commit first
+      LAST_GALE=$(sqlite3 "$DB_PATH" "
+        SELECT status, completed_at FROM inter_agent_tasks
+        WHERE to_agent = 'gale' AND status = 'completed'
+        ORDER BY completed_at DESC LIMIT 1;
+      " 2>/dev/null)
+      if [ -z "$LAST_GALE" ]; then
+        echo "🚫 R4G WORKFLOW VIOLATION: Cannot deploy without Gale's commit!" >&2
+        echo "   Workflow: Gale (fix+commit) → Freddie (deploy) → Kim (verify)" >&2
+        exit 6
+      fi
+
+      # RULE 2: Git commit must exist before deploy
+      if [ -d "$R4G_DIR/.git" ]; then
+        UNCOMMITTED=$(git -C "$R4G_DIR" status --porcelain 2>/dev/null | head -1)
+        if [ -n "$UNCOMMITTED" ]; then
+          echo "🚫 R4G WORKFLOW VIOLATION: Uncommitted changes in R4G!" >&2
+          echo "   Gale must commit before deploy. Run: git -C $R4G_DIR status" >&2
+          exit 6
+        fi
+      fi
+
+      # RULE 3: Auto-push to GitHub before deploy
+      if [ -d "$R4G_DIR/.git" ]; then
+        REMOTE_CHECK=$(git -C "$R4G_DIR" remote get-url origin 2>/dev/null || echo "")
+        if [ -n "$REMOTE_CHECK" ]; then
+          git -C "$R4G_DIR" push origin master --quiet 2>/dev/null && \
+            echo "✅ R4G: auto-pushed to GitHub (business-for-fun/r4g)" >&2 || \
+            echo "⚠️  R4G: git push failed, continue with deploy" >&2
+        fi
+      fi
+      ;;
+
+    kim)
+      # RULE 4: Cannot verify without deploy first
+      LAST_DEPLOY=$(sqlite3 "$DB_PATH" "
+        SELECT status, completed_at FROM inter_agent_tasks
+        WHERE to_agent IN ('freddie', 'olaf')
+        AND status = 'completed'
+        AND prompt LIKE '%deploy%'
+        ORDER BY completed_at DESC LIMIT 1;
+      " 2>/dev/null)
+      if [ -z "$LAST_DEPLOY" ]; then
+        echo "🚫 R4G WORKFLOW VIOLATION: Cannot verify without deploy!" >&2
+        echo "   Workflow: Gale (fix+commit) → Freddie (deploy) → Kim (verify)" >&2
+        exit 6
+      fi
+      ;;
+  esac
+fi
+
 # ── Resolve agent-specific dashboard port ──
 resolve_agent_port() {
   local agent_id="$1"

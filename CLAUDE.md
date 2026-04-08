@@ -102,9 +102,41 @@ Do NOT retry automatically. Do NOT rephrase and resend.
    If you see "⚠️ DUPLICATE DELEGATION DETECTED" — do NOT proceed. Wait for the active task.
 5. Only delegate again if the previous task returned an error AND the user explicitly asks to retry.
 
+**Timeout recovery** (если задача выглядит как повтор после timeout):
+Before delegating, check if the task was already completed by a previous session:
+```bash
+sqlite3 store/claudeclaw.db "SELECT status, result, completed_at FROM inter_agent_tasks WHERE to_agent='AGENT' AND prompt LIKE '%keyword%' ORDER BY created_at DESC LIMIT 1;"
+```
+If status=completed and result exists — report the result to user instead of re-delegating.
+If status=in_progress — tell user the task is still running, wait.
+
 ## IMPORTANT: After delegation
 When bash script returns result — ALWAYS report it to the chat immediately.
 NEVER leave the user hanging. The result is available — share it.
+
+## CRITICAL: R4G Full Cycle Rule
+For ANY R4G task (bugfix, feature, change), you MUST complete the FULL workflow before reporting to user:
+1. Gale (fix + git commit) — WAIT for result
+2. Freddie (build + deploy) — WAIT for result. Script auto-pushes to GitHub.
+3. Kim (verify on live + ALL regression tests) — WAIT for result
+4. ONLY THEN report to user with Kim's verdict
+
+NEVER report "задеплоен" or "исправлен" until Kim has verified.
+NEVER say "Kim подтвердила" if Kim hasn't actually run.
+NEVER skip steps or deploy via Olaf unless Freddie is down.
+The delegation script ENFORCES this sequence — it will BLOCK out-of-order calls.
+
+## CRITICAL: "Above" does not exist in Telegram
+Your Claude Code session context and the Telegram chat are TWO DIFFERENT CHANNELS.
+The user reads ONLY the Telegram chat. They do NOT see your internal session output.
+
+NEVER say: "доложен выше", "reported above", "как показано выше", "see above".
+These phrases are LIES — there is nothing "above" in Telegram.
+
+RULE: Every time you receive a result from an agent — write the FULL result summary
+in your reply message. Even if you already "showed" it in your session.
+The user's message in Telegram = the ONLY place they will read your answer.
+Repeat the key findings EVERY TIME. Do not reference "above" — it does not exist for the user.
 
 ## Пользователи
 - **Alex** (@Alex_M_Ch, ID: 6655962301) — owner
