@@ -72,6 +72,32 @@ This applies to ALL tasks — coding, research, content, infrastructure, analysi
 1. `bash scripts/delegate-to-agent.sh olaf "<what to check/fix>"`
 2. Report to user
 
+### Website Factory workflow (FAM client sites)
+1. **Rob** (Research & Assets) — find REAL verified photos of the business (Google Maps, HiDubai, 2GIS), collect real customer reviews (name, stars, text), gather business details (hours, services, prices, contacts), find competitor websites for style reference. Deliverable: structured asset package per business.
+2. **Lalo** (Content) — using Rob's data, write all website copy (About, Services, CTA, SEO meta), craft selling text for outreach, determine pricing strategy, prepare outreach message (email/WhatsApp). Deliverable: complete text package per business.
+3. **Freddie** (Design + Build + Deploy) — using Rob's photos + Lalo's text, determine color palette & style from real photos, build 2 variants per business (A=classic, B=modern), integrate real photos/text/reviews, add WhatsApp form, deploy to Firebase. Deliverable: 2 live URLs per business.
+4. **Kim** (QA) — check mobile responsiveness, test WhatsApp form, verify photos load, check text quality. ✅ → report to user. ❌ → back to Freddie.
+- Each step WAITS for the previous step's output before starting.
+- Photos must be 100% verified as belonging to that specific business.
+- Gale only involved if n8n/backend logic is needed.
+
+#### Rob's Research — MANDATORY deliverables:
+- **Photos**: DOWNLOAD actual image files (curl -o) to `/projects/fam/sites/assets/<slug>/photos/`. Verify each file is valid image (`file` command). Sources: Google Images, Google Maps, 2GIS, HiDubai, Facebook, Instagram, YellowPages UAE, TripAdvisor — use ALL available sources.
+- **Reviews**: Use Google Places API to extract EXACT review text (positive, 4-5 stars). Save reviewer name, stars, text. Not just "4.0 rating" — actual quotes.
+- **All data**: Save to `/projects/fam/sites/assets/<slug>/research.json`
+
+#### Google Drive storage (Gale handles via n8n):
+- **Structure**: `FAM/Clients/<Business Name>/` — subfolder per client in Google Drive
+- Each folder contains: research doc, downloaded photos, reviews, content doc
+- **FAM_Sheet_1** has column `Client_Folder_URL` — link to this client's Drive folder
+- Gale creates folders + uploads files + updates Sheet via n8n (Drive + Sheets credentials in PROFILE.md)
+
+#### Freddie's Design — MANDATORY rules:
+- Analyze actual downloaded photos FIRST → extract dominant colors
+- Build color palette & style that HARMONIZES with the real photos
+- Reviews from Lalo go as real Testimonials section (name, stars, quoted text)
+- NO placeholder images. NO stock photos. Only real business photos.
+
 ### Complex multi-step task
 1. Break into subtasks
 2. Delegate each to the right agent
@@ -182,6 +208,15 @@ Project files: `projects/r4g/`, `projects/limo/`, `projects/fam/` (lowercase)
 - GCP Organization: business-for-fun.com (ID: 180434074994)
 - FAM-sites project: meta-century-487321-e1 (Firebase Hosting настроен)
 - n8n серверы (internal): R4G=10.128.0.5, LIMO=10.128.0.7, FAM=10.128.0.3
+
+### CRITICAL: Firebase Deploy Target Rules
+| Project | Firebase project ID | Command |
+|---|---|---|
+| **R4G** | `business-for-fun-landing` | `firebase deploy --only hosting --project=business-for-fun-landing` |
+| **FAM client sites** | `meta-century-487321-e1` | `firebase deploy --only hosting --project=meta-century-487321-e1` |
+
+**NEVER deploy FAM sites to business-for-fun-landing. NEVER deploy R4G to meta-century-487321-e1.**
+Violating this rule destroys production. Always verify `--project` flag before deploy.
 
 ## Sending Files via Telegram
 ```bash
