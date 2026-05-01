@@ -8,6 +8,8 @@ const EMBEDDING_DIMS = 1536;
 const MAX_RETRIES = 3;
 /** Initial backoff delay in ms (doubles each retry). */
 const INITIAL_BACKOFF_MS = 1000;
+/** Timeout per fetch call in ms — 5 seconds is plenty for embeddings API. */
+const FETCH_TIMEOUT_MS = 5_000;
 
 /**
  * Sleep helper for retry backoff.
@@ -43,6 +45,7 @@ export async function embedText(text: string): Promise<number[]> {
           input: text,
           dimensions: EMBEDDING_DIMS,
         }),
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       });
 
       // Non-retryable client errors (400, 401, 403, 404)
@@ -70,14 +73,20 @@ export async function embedText(text: string): Promise<number[]> {
       const data = await response.json() as { data: Array<{ embedding: number[] }> };
       return data.data?.[0]?.embedding ?? [];
     } catch (err) {
-      // Network errors (ECONNRESET, timeout, etc.) — retryable
-      if (err instanceof TypeError || (err instanceof Error && err.message.includes('fetch'))) {
+      // Timeout (AbortError / TimeoutError) and network errors — all retryable
+      const isTimeout = err instanceof DOMException && (err.name === 'AbortError' || err.name === 'TimeoutError');
+      const isNetwork = err instanceof TypeError || (err instanceof Error && err.message.includes('fetch'));
+      if (isTimeout || isNetwork) {
         lastError = err instanceof Error ? err : new Error(String(err));
-        logger.warn({ attempt, err: lastError.message }, 'OpenAI embedding fetch error (retrying)');
+        logger.warn(
+          { attempt, err: lastError.message, timeout: isTimeout },
+          `OpenAI embedding ${isTimeout ? 'timed out' : 'fetch error'} (retrying)`,
+        );
         if (attempt < MAX_RETRIES) {
           await sleep(INITIAL_BACKOFF_MS * Math.pow(2, attempt - 1));
           continue;
         }
+        throw lastError;
       }
       throw err;
     }
