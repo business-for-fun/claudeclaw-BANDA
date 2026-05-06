@@ -34,10 +34,11 @@ export async function buildMemoryContext(
   const seen = new Set<number>();
   const memLines: string[] = [];
 
-  // Embed the query for vector search (async, adds ~200ms but gives semantic results)
+  // Embed the query for vector search — single attempt, short timeout.
+  // This is in the critical path (blocks queue); keyword fallback is immediate on failure.
   let queryEmbedding: number[] | undefined;
   try {
-    queryEmbedding = await embedText(userMessage);
+    queryEmbedding = await embedText(userMessage, { maxRetries: 1, timeoutMs: 2500 });
   } catch {
     // Embedding failure is non-fatal; falls back to keyword search
   }

@@ -11,6 +11,13 @@ const INITIAL_BACKOFF_MS = 1000;
 /** Timeout per fetch call in ms — 5 seconds is plenty for embeddings API. */
 const FETCH_TIMEOUT_MS = 5_000;
 
+export interface EmbedOptions {
+  /** Max retry attempts (default: 3). Use 1 in latency-critical paths. */
+  maxRetries?: number;
+  /** Per-attempt fetch timeout in ms (default: 5000). */
+  timeoutMs?: number;
+}
+
 /**
  * Sleep helper for retry backoff.
  */
@@ -23,16 +30,18 @@ function sleep(ms: number): Promise<void> {
  * Returns a float array (1536 dimensions).
  * Retries up to 3 times with exponential backoff on transient errors.
  */
-export async function embedText(text: string): Promise<number[]> {
+export async function embedText(text: string, options?: EmbedOptions): Promise<number[]> {
   const env = readEnvFile(['OPENAI_API_KEY']);
   const apiKey = env.OPENAI_API_KEY;
   if (!apiKey) {
     throw new Error('OPENAI_API_KEY is not set in .env');
   }
 
+  const maxRetries = options?.maxRetries ?? MAX_RETRIES;
+  const timeoutMs = options?.timeoutMs ?? FETCH_TIMEOUT_MS;
   let lastError: Error | null = null;
 
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       const response = await fetch('https://api.openai.com/v1/embeddings', {
         method: 'POST',
@@ -45,7 +54,7 @@ export async function embedText(text: string): Promise<number[]> {
           input: text,
           dimensions: EMBEDDING_DIMS,
         }),
-        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        signal: AbortSignal.timeout(timeoutMs),
       });
 
       // Non-retryable client errors (400, 401, 403, 404)
@@ -63,7 +72,7 @@ export async function embedText(text: string): Promise<number[]> {
           { status: response.status, attempt, err: err.slice(0, 200) },
           'OpenAI embedding failed (retrying)',
         );
-        if (attempt < MAX_RETRIES) {
+        if (attempt < maxRetries) {
           await sleep(INITIAL_BACKOFF_MS * Math.pow(2, attempt - 1));
           continue;
         }
@@ -82,7 +91,7 @@ export async function embedText(text: string): Promise<number[]> {
           { attempt, err: lastError.message, timeout: isTimeout },
           `OpenAI embedding ${isTimeout ? 'timed out' : 'fetch error'} (retrying)`,
         );
-        if (attempt < MAX_RETRIES) {
+        if (attempt < maxRetries) {
           await sleep(INITIAL_BACKOFF_MS * Math.pow(2, attempt - 1));
           continue;
         }
