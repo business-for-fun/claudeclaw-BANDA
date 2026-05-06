@@ -97,7 +97,7 @@ export interface AgentInfo {
 let agentRegistry: AgentInfo[] = [];
 
 /** Default timeout for a delegated task (10 minutes). */
-const DEFAULT_TIMEOUT_MS = 30 * 60 * 1000;
+const DEFAULT_TIMEOUT_MS = 40 * 60 * 1000;
 
 /**
  * Initialize the orchestrator by scanning `agents/` for valid configs.

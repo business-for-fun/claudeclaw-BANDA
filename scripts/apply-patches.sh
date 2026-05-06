@@ -78,8 +78,10 @@ if 'only respond if bot is @mentioned' not in content and 'const isGroup = ctx.c
 " 2>/dev/null || true
 sed -i "s/Bash: 'Выполняю команду'/Bash: 'Running command'/" src/agent.ts
 sed -i "s/Принял задачу от/Task received from/g" src/orchestrator.ts
-sed -i 's/TIMEOUT_MS="${3:-600000}"/TIMEOUT_MS="${3:-1800000}"/' scripts/delegate-to-agent.sh
-sed -i "s/const DEFAULT_TIMEOUT_MS = 10 \* 60 \* 1000;/const DEFAULT_TIMEOUT_MS = 30 * 60 * 1000;/" src/orchestrator.ts
+sed -i 's/TIMEOUT_MS="${3:-600000}"/TIMEOUT_MS="${3:-2400000}"/' scripts/delegate-to-agent.sh
+sed -i 's/TIMEOUT_MS="${3:-1800000}"/TIMEOUT_MS="${3:-2400000}"/' scripts/delegate-to-agent.sh
+sed -i "s/const DEFAULT_TIMEOUT_MS = 10 \* 60 \* 1000;/const DEFAULT_TIMEOUT_MS = 40 * 60 * 1000;/" src/orchestrator.ts
+sed -i "s/const DEFAULT_TIMEOUT_MS = 30 \* 60 \* 1000;/const DEFAULT_TIMEOUT_MS = 40 * 60 * 1000;/" src/orchestrator.ts
 sed -i "s/tuco|lalo|gale|kim)/tuco|lalo|gale|kim|olaf|rob|freddie)/" scripts/delegate-to-agent.sh
 sed -i "s/Задача выполнена! Отправляю результат →/Task completed! Sending result →/g" src/orchestrator.ts
 
@@ -130,3 +132,6 @@ if old in content:
     open('src/orchestrator.ts', 'w').write(content)
     print('No-fallback patch applied')
 " 2>/dev/null || true
+
+# R4G_Debug observer: log group messages for context (survives updates)
+python3 scripts/patches/r4g-debug-observer.py 2>/dev/null || true

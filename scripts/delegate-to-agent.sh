@@ -58,7 +58,7 @@ BASE_URL="http://localhost:${DASHBOARD_PORT}"
 # ── Parallel mode ──
 if [ "${1:-}" = "--parallel" ]; then
   TASKS_JSON="${2:-}"
-  TIMEOUT_MS="${3:-1800000}"
+  TIMEOUT_MS="${3:-2400000}"
 
   if [ -z "$TASKS_JSON" ]; then
     echo "Usage: delegate-to-agent.sh --parallel '<json_tasks>' [timeout_ms]" >&2
@@ -100,7 +100,7 @@ fi
 # ── Single agent mode ──
 AGENT_ID="${1:-}"
 PROMPT="${2:-}"
-TIMEOUT_MS="${3:-1800000}"
+TIMEOUT_MS="${3:-2400000}"
 
 if [ -z "$AGENT_ID" ] || [ -z "$PROMPT" ]; then
   echo "Usage: delegate-to-agent.sh <agent_id> \"prompt\" [timeout_ms]" >&2
