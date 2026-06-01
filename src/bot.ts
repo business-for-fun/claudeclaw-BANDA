@@ -4,7 +4,7 @@ import path from 'path';
 import os from 'os';
 import { Api, Bot, Context, InputFile, RawApi } from 'grammy';
 
-import { runAgent, UsageInfo, AgentProgressEvent } from './agent.js';
+import { runAgent, UsageInfo, AgentProgressEvent, AgentResult } from './agent.js';
 import {
   AGENT_ID,
   ALLOWED_CHAT_ID,
@@ -20,9 +20,10 @@ import {
   AGENT_TIMEOUT_MS,
   PROJECT_ROOT,
 } from './config.js';
-import { clearSession, getRecentConversation, getRecentMemories, getRecentTaskOutputs, getSession, getSessionConversation, getSessionBaseline, setSessionBaseline, logToHiveMind, setSession, lookupWaChatId, saveWaMessageMap, saveTokenUsage } from './db.js';
+import { clearSession, getRecentConversation, getRecentMemories, getRecentTaskOutputs, getSession, getSessionConversation, getSessionBaseline, setSessionBaseline, logToHiveMind, getHiveMindEntries, setSession, lookupWaChatId, saveWaMessageMap, saveTokenUsage } from './db.js';
 import { logger } from './logger.js';
-import { downloadMedia, buildPhotoMessage, buildDocumentMessage, buildVideoMessage } from './media.js';
+import { downloadMedia, buildPhotoMessage, buildPhotoContent, buildDocumentMessage, buildVideoMessage } from './media.js';
+import type { MessageContent, ContentBlock } from './media.js';
 import { buildMemoryContext, saveConversationTurn } from './memory.js';
 import { createHandoffSnapshot } from './handoff.js';
 import { messageQueue } from './message-queue.js';
@@ -364,10 +365,11 @@ function isAuthorised(chatId: number): boolean {
 
 /**
  * Core message handler. Called for every inbound text/voice/photo/document.
+ * @param message  Plain text or vision content blocks (string | ContentBlock[])
  * @param forceVoiceReply  When true, always respond with audio (e.g. user sent a voice note).
  * @param skipLog  When true, skip logging this turn to conversation_log (used by /respin to avoid self-referential logging).
  */
-async function handleMessage(ctx: Context, message: string, forceVoiceReply = false, skipLog = false): Promise<void> {
+async function handleMessage(ctx: Context, message: MessageContent, forceVoiceReply = false, skipLog = false): Promise<void> {
   const chatId = ctx.chat!.id;
   const chatIdStr = chatId.toString();
 
@@ -385,17 +387,26 @@ async function handleMessage(ctx: Context, message: string, forceVoiceReply = fa
     return;
   }
 
+  // Extract a plain-text summary for logging, delegation, and memory context.
+  // For vision messages (ContentBlock[]), pull out the text blocks; for plain
+  // strings, use directly. The full `message` (with image blocks) is preserved
+  // separately and only passed to runAgent.
+  const messageText: string = typeof message === 'string'
+    ? message
+    : message.filter((b): b is { type: 'text'; text: string } => b.type === 'text').map(b => b.text).join('\n');
+
+  // Emit user message to SSE clients
+  const isVision = Array.isArray(message);
   logger.info(
-    { chatId, messageLen: message.length },
+    { chatId, messageLen: messageText.length, isVision },
     'Processing message',
   );
 
-  // Emit user message to SSE clients
-  emitChatEvent({ type: 'user_message', chatId: chatIdStr, content: message, source: 'telegram' });
+  emitChatEvent({ type: 'user_message', chatId: chatIdStr, content: messageText, source: 'telegram' });
 
   // ── Delegation detection ────────────────────────────────────────────
   // Intercept @agentId or /delegate syntax before running the main agent.
-  const delegation = parseDelegation(message);
+  const delegation = parseDelegation(messageText);
   if (delegation) {
     setProcessing(chatIdStr, true);
     await sendTyping(ctx.api, chatId);
@@ -417,7 +428,7 @@ async function handleMessage(ctx: Context, message: string, forceVoiceReply = fa
       const header = `[${delegationResult.agentId} — ${Math.round(delegationResult.durationMs / 1000)}с]`;
 
       if (!skipLog) {
-        saveConversationTurn(chatIdStr, message, response, undefined, AGENT_ID);
+        saveConversationTurn(chatIdStr, messageText, response, undefined, AGENT_ID);
       }
       emitChatEvent({ type: 'assistant_message', chatId: chatIdStr, content: response, source: 'telegram' });
 
@@ -435,11 +446,11 @@ async function handleMessage(ctx: Context, message: string, forceVoiceReply = fa
   }
 
   // Build memory context and prepend to message
-  const memCtx = await buildMemoryContext(chatIdStr, message);
-  const parts: string[] = [];
+  const memCtx = await buildMemoryContext(chatIdStr, messageText);
+  const contextParts: string[] = [];
   // Agent system prompt is loaded automatically by Claude SDK via settingSources: ['project']
   // from the agent's CLAUDE.md in agentCwd. No need to inject it manually.
-  if (memCtx) parts.push(memCtx);
+  if (memCtx) contextParts.push(memCtx);
 
   // Inject recent scheduled task outputs so the user can reply to them naturally.
   // Without this, Claude has no idea what a scheduled task just showed the user.
@@ -449,11 +460,25 @@ async function handleMessage(ctx: Context, message: string, forceVoiceReply = fa
       const ago = Math.round((Date.now() / 1000 - t.last_run) / 60);
       return `[Scheduled task ran ${ago}m ago]\nTask: ${t.prompt}\nOutput:\n${t.last_result}`;
     });
-    parts.push(`[Recent scheduled task context — the user may be replying to this]\n${taskLines.join('\n\n')}\n[End task context]`);
+    contextParts.push(`[Recent scheduled task context — the user may be replying to this]\n${taskLines.join('\n\n')}\n[End task context]`);
   }
 
-  parts.push(message);
-  const fullMessage = parts.join('\n\n');
+  // Build the full message for runAgent.
+  // For plain text: join context + message as string.
+  // For vision (ContentBlock[]): prepend context as a text block, keep image blocks intact.
+  let fullMessage: MessageContent;
+  if (typeof message === 'string') {
+    contextParts.push(message);
+    fullMessage = contextParts.join('\n\n');
+  } else {
+    // Vision content: prepend context as a text block before the image+text blocks
+    const visionBlocks: ContentBlock[] = [];
+    if (contextParts.length > 0) {
+      visionBlocks.push({ type: 'text', text: contextParts.join('\n\n') });
+    }
+    visionBlocks.push(...message);
+    fullMessage = visionBlocks;
+  }
 
   const sessionId = getSession(chatIdStr, AGENT_ID);
 
@@ -493,22 +518,37 @@ async function handleMessage(ctx: Context, message: string, forceVoiceReply = fa
     const abortCtrl = new AbortController();
     setActiveAbort(chatIdStr, abortCtrl);
 
-    // Auto-abort if the agent runs too long (prevents runaway commands from blocking the bot)
+    // Soft abort: signals SDK to kill subprocess after AGENT_TIMEOUT_MS
     const timeoutId = setTimeout(() => {
       logger.warn({ chatId: chatIdStr, timeoutMs: AGENT_TIMEOUT_MS }, 'Agent query timed out, aborting');
       abortCtrl.abort();
     }, AGENT_TIMEOUT_MS);
 
-    const result = await runAgent(
-      fullMessage,
-      sessionId,
-      () => void sendTyping(ctx.api, chatId),
-      onProgress,
-      chatModelOverride.get(chatIdStr) ?? agentDefaultModel,
-      abortCtrl,
-    );
+    // Hard deadline: if the SDK subprocess doesn't unblock within 2 min after soft abort,
+    // force-resolve so the per-chat queue is never permanently stuck.
+    const HARD_DEADLINE_MS = AGENT_TIMEOUT_MS + 120_000;
+    let hardDeadlineId: ReturnType<typeof setTimeout> | null = null;
+    const hardDeadline = new Promise<AgentResult>((resolve) => {
+      hardDeadlineId = setTimeout(() => {
+        logger.error({ chatId: chatIdStr, hardDeadlineMs: HARD_DEADLINE_MS }, 'Agent hard deadline — forcing queue forward');
+        resolve({ text: null, newSessionId: undefined, usage: null, aborted: true });
+      }, HARD_DEADLINE_MS);
+    });
+
+    const result = await Promise.race([
+      runAgent(
+        fullMessage,
+        sessionId,
+        () => void sendTyping(ctx.api, chatId),
+        onProgress,
+        chatModelOverride.get(chatIdStr) ?? agentDefaultModel,
+        abortCtrl,
+      ),
+      hardDeadline,
+    ]);
 
     clearTimeout(timeoutId);
+    if (hardDeadlineId !== null) clearTimeout(hardDeadlineId);
     setActiveAbort(chatIdStr, null);
     clearInterval(typingInterval);
 
@@ -536,7 +576,7 @@ async function handleMessage(ctx: Context, message: string, forceVoiceReply = fa
     // Save conversation turn to memory (including full log).
     // Skip logging for synthetic messages like /respin to avoid self-referential growth.
     if (!skipLog) {
-      saveConversationTurn(chatIdStr, message, rawResponse, result.newSessionId ?? sessionId, AGENT_ID);
+      saveConversationTurn(chatIdStr, messageText, rawResponse, result.newSessionId ?? sessionId, AGENT_ID);
     }
 
     // Emit assistant response to SSE clients
@@ -1264,16 +1304,39 @@ export function createBot(): Bot {
       const isMentioned = botUsername && text.includes(`@${botUsername}`);
       const isReplyToBot = ctx.message?.reply_to_message?.from?.id === ctx.me?.id;
       if (!isMentioned && !isReplyToBot) {
+        // Silent observer for R4G_Debug group (-1003759375768): log to hive_mind
+        if (chatIdStr === '-1003759375768') {
+          const _sName = ctx.from?.first_name || ctx.from?.username || 'Unknown';
+          const _sUser = ctx.from?.username ? '@' + ctx.from.username : '';
+          try {
+            logToHiveMind(AGENT_ID, chatIdStr, 'group_observe', ('[' + _sName + ' ' + _sUser + '] ' + text).slice(0, 500));
+          } catch (e) { /* silent */ }
+        }
         return; // Ignore group messages without @mention
       }
     }
 
     const senderName = ctx.from?.first_name || ctx.from?.username || 'Unknown';
     const senderUsername = ctx.from?.username ? `@${ctx.from.username}` : '';
-    const enrichedText = isGroup
+    let enrichedText = isGroup
       ? `[From: ${senderName} ${senderUsername}] ${text}`
       : text;
-    messageQueue.enqueue(chatIdStr, () => handleMessage(ctx, enrichedText));
+    // R4G_Debug: inject recent group_observe context so agent sees chat history
+if (chatIdStr === '-1003759375768') {
+  try {
+    const all = getHiveMindEntries(40);
+    const recent = all
+      .filter((e: any) => e.chat_id === chatIdStr && e.action === 'group_observe')
+      .slice(0, 20)
+      .reverse();
+    if (recent.length > 0) {
+      const ctxBlock = recent.map((e: any) => '  - ' + e.summary).join('\n');
+      enrichedText = '[Recent R4G_Debug chat context (' + recent.length + ' prior messages):\n' + ctxBlock + '\n]\n\n' + enrichedText;
+    }
+  } catch (e) { /* silent */ }
+}
+
+messageQueue.enqueue(chatIdStr, () => handleMessage(ctx, enrichedText));
   });
 
   // Voice messages — real transcription via Groq Whisper
@@ -1320,9 +1383,10 @@ export function createBot(): Bot {
     try {
       const photo = ctx.message.photo[ctx.message.photo.length - 1];
       const localPath = await downloadMedia(activeBotToken, photo.file_id, 'photo.jpg');
-      const msg = buildPhotoMessage(localPath, ctx.message.caption ?? undefined);
+      // Build vision content blocks (base64 inline image) so Claude can actually SEE the photo
+      const visionContent = buildPhotoContent(localPath, ctx.message.caption ?? undefined);
       const chatIdStr = chatId.toString();
-      messageQueue.enqueue(chatIdStr, () => handleMessage(ctx, msg));
+      messageQueue.enqueue(chatIdStr, () => handleMessage(ctx, visionContent));
     } catch (err) {
       logger.error({ err }, 'Photo download failed');
       await ctx.reply('Could not download photo. Try again.');

@@ -127,8 +127,31 @@ export async function downloadMedia(
 }
 
 /**
+ * Content block types matching the Anthropic Messages API.
+ * Used for vision (inline images) and mixed content.
+ */
+export type ImageContentBlock = {
+  type: 'image';
+  source: {
+    type: 'base64';
+    media_type: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+    data: string;
+  };
+};
+
+export type TextContentBlock = {
+  type: 'text';
+  text: string;
+};
+
+export type ContentBlock = ImageContentBlock | TextContentBlock;
+
+/** Union type: messages can be plain text or an array of content blocks (for vision). */
+export type MessageContent = string | ContentBlock[];
+
+/**
  * Build the message text to send to Claude when a photo is received.
- * Claude Code's Read tool can open image files -- just give it the path.
+ * Returns a plain text string (legacy fallback if file can't be read).
  */
 export function buildPhotoMessage(localPath: string, caption?: string): string {
   let msg = `Photo received. File saved at: ${localPath}`;
@@ -137,6 +160,58 @@ export function buildPhotoMessage(localPath: string, caption?: string): string {
   }
   msg += '\nPlease analyze this image.';
   return msg;
+}
+
+/**
+ * Build vision content blocks for a photo message.
+ * Reads the image file, converts to base64, and returns an array of
+ * content blocks that Claude can process as inline vision input.
+ *
+ * Falls back to a text-only message if the file can't be read.
+ */
+export function buildPhotoContent(localPath: string, caption?: string): MessageContent {
+  try {
+    const imageBuffer = fs.readFileSync(localPath);
+    const base64Data = imageBuffer.toString('base64');
+
+    // Detect media type from extension
+    const ext = path.extname(localPath).toLowerCase();
+    const mediaTypeMap: Record<string, ImageContentBlock['source']['media_type']> = {
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp',
+    };
+    const mediaType = mediaTypeMap[ext] || 'image/jpeg';
+
+    let textPart = `Photo received (file: ${localPath}).`;
+    if (caption) {
+      textPart += `\nCaption: "${caption}"`;
+    }
+    textPart += '\nPlease analyze this image.';
+
+    const blocks: ContentBlock[] = [
+      {
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: mediaType,
+          data: base64Data,
+        },
+      },
+      {
+        type: 'text',
+        text: textPart,
+      },
+    ];
+
+    logger.info({ localPath, mediaType, base64Len: base64Data.length }, 'Built photo vision content');
+    return blocks;
+  } catch (err) {
+    logger.warn({ localPath, err }, 'Failed to read photo for vision, falling back to text-only');
+    return buildPhotoMessage(localPath, caption);
+  }
 }
 
 /**

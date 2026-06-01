@@ -3,6 +3,7 @@ import { query } from '@anthropic-ai/claude-agent-sdk';
 import { PROJECT_ROOT, agentCwd, agentSystemPrompt } from './config.js';
 import { readEnvFile } from './env.js';
 import { logger } from './logger.js';
+import type { MessageContent, ContentBlock } from './media.js';
 
 export interface UsageInfo {
   inputTokens: number;
@@ -85,16 +86,19 @@ export interface AgentResult {
  * This is the format the Claude Agent SDK expects for its `prompt` parameter.
  * The SDK drives the agentic loop internally (tool use, multi-step reasoning)
  * and surfaces a final `result` event when done.
+ *
+ * `content` can be a plain string or an array of ContentBlock (text + image)
+ * for vision messages. The SDK/Messages API accepts both forms natively.
  */
-async function* singleTurn(text: string): AsyncGenerator<{
+async function* singleTurn(content: string | ContentBlock[]): AsyncGenerator<{
   type: 'user';
-  message: { role: 'user'; content: string };
+  message: { role: 'user'; content: string | ContentBlock[] };
   parent_tool_use_id: null;
   session_id: string;
 }> {
   yield {
     type: 'user',
-    message: { role: 'user', content: text },
+    message: { role: 'user', content },
     parent_tool_use_id: null,
     session_id: '',
   };
@@ -111,13 +115,13 @@ async function* singleTurn(text: string): AsyncGenerator<{
  * No explicit token needed if you're already logged in via `claude login`.
  * Optionally override with CLAUDE_CODE_OAUTH_TOKEN in .env.
  *
- * @param message    The user's text (may include transcribed voice prefix)
+ * @param message    The user's text or vision content blocks (string | ContentBlock[])
  * @param sessionId  Claude Code session ID to resume, or undefined for new session
  * @param onTyping   Called every TYPING_REFRESH_MS while waiting — sends typing action to Telegram
  * @param onProgress Called when sub-agents start/complete — sends status updates to Telegram
  */
 export async function runAgent(
-  message: string,
+  message: MessageContent,
   sessionId: string | undefined,
   onTyping: () => void,
   onProgress?: (event: AgentProgressEvent) => void,
@@ -156,8 +160,10 @@ export async function runAgent(
   onTyping();
 
   try {
+    const messageLen = typeof message === 'string' ? message.length : message.reduce((acc, b) => acc + (b.type === 'text' ? b.text.length : 0), 0);
+    const isVision = Array.isArray(message);
     logger.info(
-      { sessionId: sessionId ?? 'new', messageLen: message.length },
+      { sessionId: sessionId ?? 'new', messageLen, isVision },
       'Starting agent query',
     );
 
