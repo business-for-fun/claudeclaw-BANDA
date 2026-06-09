@@ -248,7 +248,7 @@ export function startDashboard(botApi?: Api<RawApi>, portOverride?: number): voi
     }
     const mainStats = getAgentTokenStats('main');
     const allAgents = [
-      { id: 'main', name: 'Main', description: 'Primary ClaudeClaw bot', model: 'claude-opus-4-6', running: mainRunning, todayTurns: mainStats.todayTurns, todayCost: mainStats.todayCost },
+      { id: 'main', name: 'Main', description: 'Primary ClaudeClaw bot', model: agentDefaultModel ?? 'claude-opus-4-6', running: mainRunning, todayTurns: mainStats.todayTurns, todayCost: mainStats.todayCost },
       ...agents,
     ];
 
@@ -299,13 +299,14 @@ export function startDashboard(botApi?: Api<RawApi>, portOverride?: number): voi
         prompt?: string;
         timeoutMs?: number;
         fromAgent?: string;
+        chatId?: string;
       }>();
 
       if (!body?.agentId || !body?.prompt) {
         return c.json({ ok: false, error: 'agentId and prompt are required' }, 400);
       }
 
-      const chatId = ALLOWED_CHAT_ID || '';
+      const chatId = body.chatId || ALLOWED_CHAT_ID || '';
       const fromAgent = body.fromAgent || AGENT_ID;
       const timeoutMs = body.timeoutMs || 10 * 60 * 1000;
 
@@ -343,6 +344,7 @@ export function startDashboard(botApi?: Api<RawApi>, portOverride?: number): voi
       const body = await c.req.json<{
         tasks?: Array<{ agentId: string; prompt: string }>;
         timeoutMs?: number;
+        chatId?: string;
       }>();
 
       if (!body?.tasks || !Array.isArray(body.tasks) || body.tasks.length === 0) {
@@ -355,7 +357,7 @@ export function startDashboard(botApi?: Api<RawApi>, portOverride?: number): voi
         }
       }
 
-      const chatId = ALLOWED_CHAT_ID || '';
+      const chatId = body.chatId || ALLOWED_CHAT_ID || '';
       const fromAgent = AGENT_ID;
       const timeoutMs = body.timeoutMs || 10 * 60 * 1000;
 
