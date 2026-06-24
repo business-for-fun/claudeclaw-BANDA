@@ -1480,7 +1480,7 @@ export async function processMessageFromDashboard(
 ): Promise<void> {
   if (!ALLOWED_CHAT_ID) return;
 
-  const chatIdStr = ALLOWED_CHAT_ID;
+  const chatIdStr = ALLOWED_CHAT_ID.split(',')[0];
 
   logger.info({ messageLen: text.length, source: 'dashboard' }, 'Processing dashboard message');
 
@@ -1621,7 +1621,7 @@ export async function notifyWhatsAppIncoming(
   const text = `📱 <b>${escapeHtml(origin)}</b> — new message\n<i>/wa to view &amp; reply</i>`;
 
   try {
-    await api.sendMessage(parseInt(ALLOWED_CHAT_ID), text, { parse_mode: 'HTML' });
+    await api.sendMessage(parseInt(ALLOWED_CHAT_ID.split(',')[0]), text, { parse_mode: 'HTML' });
   } catch (err) {
     logger.error({ err }, 'Failed to send WhatsApp notification');
   }

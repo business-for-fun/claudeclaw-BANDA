@@ -258,7 +258,7 @@ export function startDashboard(botApi?: Api<RawApi>, portOverride?: number): voi
   // Agent-specific recent conversation
   app.get('/api/agents/:id/conversation', (c) => {
     const agentId = c.req.param('id');
-    const chatId = c.req.query('chatId') || ALLOWED_CHAT_ID || '';
+    const chatId = c.req.query('chatId') || ALLOWED_CHAT_ID.split(',')[0] || '';
     const limit = parseInt(c.req.query('limit') || '4', 10);
     const turns = getAgentRecentConversation(agentId, chatId, limit);
     return c.json({ turns });
@@ -306,7 +306,7 @@ export function startDashboard(botApi?: Api<RawApi>, portOverride?: number): voi
         return c.json({ ok: false, error: 'agentId and prompt are required' }, 400);
       }
 
-      const chatId = body.chatId || ALLOWED_CHAT_ID || '';
+      const chatId = body.chatId || ALLOWED_CHAT_ID.split(',')[0] || '';
       const fromAgent = body.fromAgent || AGENT_ID;
       const timeoutMs = body.timeoutMs || 10 * 60 * 1000;
 
@@ -357,7 +357,7 @@ export function startDashboard(botApi?: Api<RawApi>, portOverride?: number): voi
         }
       }
 
-      const chatId = body.chatId || ALLOWED_CHAT_ID || '';
+      const chatId = body.chatId || ALLOWED_CHAT_ID.split(',')[0] || '';
       const fromAgent = AGENT_ID;
       const timeoutMs = body.timeoutMs || 10 * 60 * 1000;
 

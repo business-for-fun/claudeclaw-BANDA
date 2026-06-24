@@ -96,8 +96,8 @@ export interface AgentInfo {
 /** Cache of available agents loaded at startup. */
 let agentRegistry: AgentInfo[] = [];
 
-/** Default timeout for a delegated task (10 minutes). */
-const DEFAULT_TIMEOUT_MS = 40 * 60 * 1000;
+/** Default timeout for a delegated task (90 minutes — covers Android builds with C++ compilation). */
+const DEFAULT_TIMEOUT_MS = 90 * 60 * 1000;
 
 /**
  * Initialize the orchestrator by scanning `agents/` for valid configs.
@@ -452,7 +452,7 @@ export async function reportToCoordinator(
   message: string,
   category: 'insight' | 'alert' | 'request' | 'result' = 'insight',
 ): Promise<void> {
-  const chatId = ALLOWED_CHAT_ID;
+  const chatId = ALLOWED_CHAT_ID.split(',')[0];
   if (!chatId) {
     logger.warn('reportToCoordinator: no ALLOWED_CHAT_ID set');
     return;

@@ -68,7 +68,7 @@ async function callSonnet(prompt: string): Promise<string> {
  * Called once per day (e.g. at 23:00 local time).
  */
 export async function runDailyDigest(chatId?: string): Promise<void> {
-  const targetChat = chatId ?? ALLOWED_CHAT_ID;
+  const targetChat = chatId ?? ALLOWED_CHAT_ID.split(',')[0];
   if (!targetChat) {
     logger.warn('No chat ID for daily digest');
     return;
