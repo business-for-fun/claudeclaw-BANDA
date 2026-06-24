@@ -4,7 +4,7 @@ import path from 'path';
 import { loadAgentConfig, resolveAgentDir, resolveAgentClaudeMd } from './agent-config.js';
 import { createBot } from './bot.js';
 import { checkPendingMigrations } from './migrations.js';
-import { ALLOWED_CHAT_ID, activeBotToken, STORE_DIR, PROJECT_ROOT, CLAUDECLAW_CONFIG, setAgentOverrides } from './config.js';
+import { ALLOWED_CHAT_ID, activeBotToken, STORE_DIR, PROJECT_ROOT, CLAUDECLAW_CONFIG, setAgentOverrides, agentDefaultModel } from './config.js';
 import { logToHiveMind } from './db.js';
 import { readEnvFile } from './env.js';
 import { startDashboard } from './dashboard.js';
@@ -50,6 +50,15 @@ if (AGENT_ID !== 'main') {
   // into the repo; that defeats the purpose of CLAUDECLAW_CONFIG and risks
   // accidentally committing personal config.
   const externalClaudeMd = path.join(CLAUDECLAW_CONFIG, 'CLAUDE.md');
+  let mainModel: string | undefined;
+  const settingsPath = path.join(CLAUDECLAW_CONFIG, 'settings.json');
+  if (fs.existsSync(settingsPath)) {
+    try {
+      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8')) as Record<string, unknown>;
+      if (typeof settings['model'] === 'string') mainModel = settings['model'];
+    } catch { /* ignore */ }
+  }
+
   if (fs.existsSync(externalClaudeMd)) {
     let systemPrompt: string | undefined;
     try {
@@ -60,9 +69,10 @@ if (AGENT_ID !== 'main') {
         agentId: 'main',
         botToken: activeBotToken,
         cwd: PROJECT_ROOT,
+        model: mainModel,
         systemPrompt,
       });
-      logger.info({ source: externalClaudeMd }, 'Loaded CLAUDE.md from CLAUDECLAW_CONFIG');
+      logger.info({ source: externalClaudeMd, model: mainModel }, 'Loaded CLAUDE.md from CLAUDECLAW_CONFIG');
     }
   } else if (!fs.existsSync(path.join(PROJECT_ROOT, 'CLAUDE.md'))) {
     logger.warn(
@@ -73,6 +83,7 @@ if (AGENT_ID !== 'main') {
 }
 
 const PID_FILE = path.join(STORE_DIR, `${AGENT_ID === 'main' ? 'claudeclaw' : `agent-${AGENT_ID}`}.pid`);
+const MODEL_FILE = path.join(STORE_DIR, `${AGENT_ID === 'main' ? 'claudeclaw' : `agent-${AGENT_ID}`}.model`);
 
 function showBanner(): void {
   const bannerPath = path.join(PROJECT_ROOT, 'banner.txt');
@@ -100,8 +111,13 @@ function acquireLock(): void {
   fs.writeFileSync(PID_FILE, String(process.pid));
 }
 
+function writeModelFile(): void {
+  try { fs.writeFileSync(MODEL_FILE, agentDefaultModel ?? 'claude-opus-4-6'); } catch { /* ignore */ }
+}
+
 function releaseLock(): void {
   try { fs.unlinkSync(PID_FILE); } catch { /* ignore */ }
+  try { fs.unlinkSync(MODEL_FILE); } catch { /* ignore */ }
 }
 
 async function main(): Promise<void> {
@@ -122,6 +138,7 @@ async function main(): Promise<void> {
   }
 
   acquireLock();
+  writeModelFile();
 
   initDatabase();
   logger.info('Database ready');
@@ -145,12 +162,12 @@ async function main(): Promise<void> {
   if (ALLOWED_CHAT_ID && hasOpenAIKey && AGENT_ID === 'main') {
     // Delay first consolidation 10 minutes after startup to let things settle
     setTimeout(() => {
-      void runConsolidation(ALLOWED_CHAT_ID).catch((err) =>
+      void runConsolidation(ALLOWED_CHAT_ID.split(',')[0]).catch((err) =>
         logger.error({ err }, 'Initial consolidation failed'),
       );
     }, 10 * 60 * 1000);
     setInterval(() => {
-      void runConsolidation(ALLOWED_CHAT_ID).catch((err) =>
+      void runConsolidation(ALLOWED_CHAT_ID.split(',')[0]).catch((err) =>
         logger.error({ err }, 'Periodic consolidation failed'),
       );
     }, 4 * 60 * 60 * 1000);
@@ -198,7 +215,7 @@ async function main(): Promise<void> {
 
   if (ALLOWED_CHAT_ID) {
     initScheduler(
-      (text) => bot.api.sendMessage(ALLOWED_CHAT_ID, text, { parse_mode: 'HTML' }).then(() => {}).catch((err) => logger.error({ err }, 'Scheduler failed to send message')),
+      (text) => bot.api.sendMessage(ALLOWED_CHAT_ID.split(',')[0], text, { parse_mode: 'HTML' }).then(() => {}).catch((err) => logger.error({ err }, 'Scheduler failed to send message')),
       AGENT_ID,
     );
   } else {
@@ -207,7 +224,7 @@ async function main(): Promise<void> {
 
   // Cross-agent chain scheduler — only main agent checks chains
   if (ALLOWED_CHAT_ID && AGENT_ID === 'main') {
-    setInterval(() => checkAndRunChains(ALLOWED_CHAT_ID), 60_000);
+    setInterval(() => checkAndRunChains(ALLOWED_CHAT_ID.split(',')[0]), 60_000);
     logger.info('Chain scheduler enabled (checking every 60s)');
   }
 
@@ -241,7 +258,7 @@ async function main(): Promise<void> {
 
       // Log startup to Hive Mind
       if (ALLOWED_CHAT_ID) {
-        logToHiveMind(AGENT_ID, ALLOWED_CHAT_ID, 'startup', `Bot started @${botInfo.username}`);
+        logToHiveMind(AGENT_ID, ALLOWED_CHAT_ID.split(',')[0], 'startup', `Bot started @${botInfo.username}`);
       }
       if (AGENT_ID === 'main') {
         console.log(`\n  ClaudeClaw online: @${botInfo.username}`);
