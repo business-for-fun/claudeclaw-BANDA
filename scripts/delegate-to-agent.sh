@@ -58,7 +58,10 @@ BASE_URL="http://localhost:${DASHBOARD_PORT}"
 # ── Parallel mode ──
 if [ "${1:-}" = "--parallel" ]; then
   TASKS_JSON="${2:-}"
-  TIMEOUT_MS="${3:-2400000}"
+  # NOTE: 90-min default conflicts with async-first guidance in CLAUDE.md.
+  # Long tasks (builds, deploys, tests) MUST pass run_in_background=true to
+  # the orchestrator. Sync callers that hit this default will block for 90 min.
+  TIMEOUT_MS="${3:-5400000}"
 
   if [ -z "$TASKS_JSON" ]; then
     echo "Usage: delegate-to-agent.sh --parallel '<json_tasks>' [timeout_ms]" >&2
@@ -100,7 +103,8 @@ fi
 # ── Single agent mode ──
 AGENT_ID="${1:-}"
 PROMPT="${2:-}"
-TIMEOUT_MS="${3:-2400000}"
+# NOTE: 90-min default — long tasks MUST use run_in_background=true (see CLAUDE.md).
+TIMEOUT_MS="${3:-5400000}"
 
 if [ -z "$AGENT_ID" ] || [ -z "$PROMPT" ]; then
   echo "Usage: delegate-to-agent.sh <agent_id> \"prompt\" [timeout_ms]" >&2

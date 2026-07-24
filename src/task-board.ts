@@ -88,7 +88,8 @@ function writeBoard(tasks: BoardTask[]): void {
   content += `|--------|-------|--------|-------|\n`;
 
   for (const t of allTasks) {
-    content += `| ${t.status} | ${t.agent} | ${t.task} | ${t.updatedAt} |\n`;
+    const safeTask = t.task.replace(/[\r\n]+/g, ' ');
+    content += `| ${t.status} | ${t.agent} | ${safeTask} | ${t.updatedAt} |\n`;
   }
 
   fs.writeFileSync(BOARD_PATH, content, 'utf-8');

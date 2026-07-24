@@ -14,6 +14,14 @@ export const UPLOADS_DIR = path.resolve(__dirname, '..', 'workspace', 'uploads')
 // Ensure uploads dir exists on module load
 fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
+const RETRYABLE_STATUS_CODES = new Set([502, 503, 504]);
+const RETRY_ATTEMPTS = 3;
+const RETRY_DELAY_MS = 2000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /**
  * Make an HTTPS GET request and return the response body as a string.
  */
@@ -37,6 +45,23 @@ function httpsGet(url: string): Promise<string> {
       res.on('error', reject);
     }).on('error', reject);
   });
+}
+
+async function httpsGetWithRetry(url: string): Promise<string> {
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= RETRY_ATTEMPTS; attempt++) {
+    try {
+      return await httpsGet(url);
+    } catch (err) {
+      lastErr = err;
+      const status = err instanceof Error ? parseInt(err.message.match(/HTTP (\d+)/)?.[1] ?? '0') : 0;
+      if (!RETRYABLE_STATUS_CODES.has(status) || attempt === RETRY_ATTEMPTS) break;
+      const safeUrl = url.replace(/\/bot[^/]+\//, '/bot[REDACTED]/');
+      logger.warn({ attempt, status, url: safeUrl }, `Telegram API transient error, retrying in ${RETRY_DELAY_MS}ms`);
+      await sleep(RETRY_DELAY_MS);
+    }
+  }
+  throw lastErr;
 }
 
 /**
@@ -97,7 +122,7 @@ export async function downloadMedia(
 ): Promise<string> {
   // Step 1: Get the file path from Telegram
   const getFileUrl = `https://api.telegram.org/bot${botToken}/getFile?file_id=${encodeURIComponent(fileId)}`;
-  const responseBody = await httpsGet(getFileUrl);
+  const responseBody = await httpsGetWithRetry(getFileUrl);
   const parsed = JSON.parse(responseBody) as { ok: boolean; result?: { file_path?: string } };
 
   if (!parsed.ok || !parsed.result?.file_path) {
