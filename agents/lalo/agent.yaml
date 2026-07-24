@@ -3,7 +3,7 @@ description: Маркетолог-расследователь - тренды, �
 
 telegram_bot_token_env: LALO_BOT_TOKEN
 
-model: claude-sonnet-4-20250514
+model: claude-sonnet-4-6
 
 dashboard_port: 3144
 

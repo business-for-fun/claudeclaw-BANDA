@@ -33,3 +33,9 @@ skills:
   - minimax-xlsx
   - pptx-generator
   - content-pipeline        # конвейер контента: ресёрч→копирайтинг→ОТК
+  # Apify (акторы/скрейпинг)
+  - apify-actor-development       # разработка нового Apify-актора
+  - apify-actorization             # конвертация JS/TS/Python проекта в актор
+  - apify-generate-output-schema   # генерация схемы датасета
+  - apify-sdk-integration          # интеграция акторов через apify-client
+  - last30days              # ресёрч по соцсетям/трендам за последние 30 дней

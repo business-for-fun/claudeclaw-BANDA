@@ -1,9 +1,9 @@
 name: Tuco Salamanca
-description: Быстрый исполнитель рутинных задач - конвертация, форматирование, скрипты, проверки, мелкие фиксы
+description: Клиентская поддержка - вежливо отвечает на вопросы клиентов, поступающие через приложение (Telegram-бот → приложение → Tuco)
 
 telegram_bot_token_env: TUCO_BOT_TOKEN
 
-model: claude-haiku-4-5
+model: claude-sonnet-4-5
 
 dashboard_port: 3143
 
@@ -17,3 +17,4 @@ skills:
   - minimax-pdf
   - minimax-xlsx
   - pptx-generator
+  - last30days

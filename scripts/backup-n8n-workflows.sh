@@ -72,13 +72,13 @@ export_from_server() {
   local host="$2"
   local key_file="$3"
 
-  if [ ! -f "$key_file" ]; then
-    log "SKIP $label: API key file not found ($key_file)"
+  if [ ! -f "$key_file" ] || [ ! -r "$key_file" ]; then
+    log "SKIP $label: API key file not found or not readable ($key_file)"
     return
   fi
 
   local api_key
-  api_key=$(cat "$key_file")
+  api_key=$(cat "$key_file") || { log "SKIP $label: cannot read API key"; return; }
 
   log "Fetching workflows from $label ($host)..."
 

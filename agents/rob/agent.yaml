@@ -3,6 +3,12 @@ description: Researcher & analyst — market research, competitor analysis, tech
 
 telegram_bot_token_env: ROB_BOT_TOKEN
 
-model: claude-haiku-4-5
+model: claude-sonnet-4-6
 
 dashboard_port: 3148
+
+# Скиллы ресёрчера
+skills:
+  - apify-ultimate-scraper  # скрейпинг/лидген: Instagram, Maps, LinkedIn, X, отзывы и т.д.
+  - last30days               # ресёрч по соцсетям/трендам за последние 30 дней
+

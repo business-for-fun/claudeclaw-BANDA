@@ -1,12 +1,9 @@
 # 📋 Task Board
 
-_Последнее обновление: 4/7/2026, 15:03:07_
+_Последнее обновление: 7/24/2026, 11:40:47_
 
 | Статус | Агент | Задача | Время |
 |--------|-------|--------|-------|
-| ⏳ | Kim Wexler | ПОВТОРНАЯ ВЕРИФИКАЦИЯ Bug #108. Предыдущая проверка не удалась из-за expired bro | 4/7/2026, 14:23:16 |
-| ⏳ | Kim Wexler | ВЕРИФИКАЦИЯ Bug #109 — Credit Matrix unsaved changes guard. Сайт: https://busine | 4/7/2026, 14:36:06 |
-| ⏳ | Olaf | БЭКАП R4G перед большой фичей ML Chains. Нужно забэкапить: 1) Firebase Hosting — | 4/7/2026, 15:03:07 |
 | ✅ | Gale Boetticher | CRITICAL BUG in R4G netting results. After the previous fix (second pass for mir | 4/6/2026, 14:34:08 |
 | ✅ | Gale Boetticher | Bug fix in R4G netting results. Issue: counterparty display is incorrect in roun | 4/6/2026, 14:20:54 |
 | ✅ | Gale Boetticher | Bug fix in R4G netting results (NettingResults.jsx or backend matching logic). I | 4/6/2026, 14:20:28 |

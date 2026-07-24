@@ -3,6 +3,9 @@ description: Infrastructure engineer — Docker, SSH, servers, deploy, monitorin
 
 telegram_bot_token_env: OLAF_BOT_TOKEN
 
-model: claude-sonnet-4-20250514
+model: claude-sonnet-4-6
 
 dashboard_port: 3147
+
+skills:
+  - last30days

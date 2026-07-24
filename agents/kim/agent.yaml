@@ -3,7 +3,7 @@ description: Юрист, ОТК, документы - проверка каче�
 
 telegram_bot_token_env: KIM_BOT_TOKEN
 
-model: claude-sonnet-4-20250514
+model: claude-sonnet-4-6
 
 dashboard_port: 3146
 
@@ -21,3 +21,4 @@ skills:
   - minimax-pdf
   - minimax-xlsx
   - pptx-generator
+  - last30days
