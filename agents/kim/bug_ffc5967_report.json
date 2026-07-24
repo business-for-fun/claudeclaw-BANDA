@@ -1,0 +1,20 @@
+{
+  "commit": "ffc5967",
+  "checks": {
+    "A": "FAIL — Toyota_Panasonic: 2 row(s), BUY×1 SELL×1 (expected 1×SELL only)",
+    "B": "PASS — Volvo_Panasonic: 1 row, BUY 40MW, hub:THE, NO phantom SELL",
+    "C": "PASS — Ford_Panasonic: 2 rows (BUY 100MW + SELL 100MW)",
+    "D": "PASS — Honda_Panasonic: 2 rows (BUY 50MW + SELL 50MW)",
+    "E": "FAIL — 1 phantom/hub-permuted row(s) detected",
+    "F": "7 rows — PASS (≤8 expected)",
+    "G": "FAIL — Honda_Sony ASYMMETRIC: BUY=40MW ≠ SELL=80MW",
+    "H": "FAIL — Admin: 1 hub-permuted dup group(s) (total 13 rows)"
+  },
+  "cLog": {
+    "postFlipSynth": 0,
+    "dedup": 0,
+    "synthesize": 46,
+    "symmetry": 0
+  },
+  "timestamp": "2026-04-24T06:36:03.808Z"
+}

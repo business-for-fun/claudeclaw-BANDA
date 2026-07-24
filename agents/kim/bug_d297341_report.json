@@ -1,0 +1,20 @@
+{
+  "commit": "d297341",
+  "checks": {
+    "A": "FAIL — Toyota_Panasonic: 6 row(s), BUY=120, SELL=120 (expected 1×SELL only)",
+    "B": "PASS — Volvo_Panasonic: 1 row, TARGET_BUY (40MW), NO phantom SELL",
+    "C": "PASS — Ford_Panasonic: 2 rows (1×BUY 100MW + 1×SELL 100MW), no duplicates",
+    "D": "PASS — Honda_Panasonic: 2 rows (1×BUY 50MW + 1×SELL 50MW), no duplicates",
+    "E": "FAIL — Total rows: 11 (too many — duplicates still present?)",
+    "F": "FAIL — Admin Trade Deals: 1 apparent duplicate row(s) found (total: 14)",
+    "G": "ERROR — No rounds found in Sony log",
+    "H": "PASS — SOLVED traders symmetric: Ford(100/100), Honda(50/50). UNSOLVED traders Toyota/Volvo have 1-sided rows (expected)."
+  },
+  "consoleLog": {
+    "postFlipSynth": 6,
+    "deduplicate": 0,
+    "synthesize": 26,
+    "symmetry": 0
+  },
+  "timestamp": "2026-04-24T06:21:23.921Z"
+}

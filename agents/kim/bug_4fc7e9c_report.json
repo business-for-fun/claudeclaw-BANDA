@@ -1,0 +1,22 @@
+{
+  "commit": "4fc7e9c",
+  "checks": {
+    "A": "PASS — Panasonic Trade Deals: 7 rows, no duplicates ✓",
+    "B": "FAIL — Toyota_Panasonic: BUY×1 SELL×1 — phantom BUY present",
+    "C": "PASS — Volvo_Panasonic: 1×BUY 40MW (legit counterparty-flip row, no phantom SELL) ✓",
+    "G": "FAIL — Panasonic total rows: 7 (expected 6, 1 extra)",
+    "D": "FAIL — Honda_Sony SELL=80MW (phantom SELL still present)",
+    "E": "PASS — Honda_Sony BUY=40MW (correct) ✓ [note: SELL=80]",
+    "F": "PASS — JVC Trade Deals: 2 rows, no phantoms, no dups ✓",
+    "H": "FAIL — Admin: 1 phantom PanasonicToyota TARGET_BUY (8 rows)"
+  },
+  "panaTDCount": 7,
+  "consoleStats": {
+    "synthBroker": 1438,
+    "synthNetting": 0,
+    "unsolvedSkip": 0,
+    "symmetry": 0
+  },
+  "verdict": "❌ FAIL — Failed: B, D, G, H",
+  "timestamp": "2026-04-24T07:51:55.431Z"
+}

@@ -1,0 +1,23 @@
+{
+  "commit": "7b0ba4a",
+  "checks": {
+    "A": "FAIL — Toyota_Panasonic: BUY×1 SELL×1 — phantom BUY still present",
+    "B": "PASS — Volvo_Panasonic: 1 row TARGET_BUY 40MW hub:THE, NO phantom SELL ✓",
+    "C": "PASS — Ford_Panasonic: 2 rows BUY 100MW + SELL 100MW ✓",
+    "D": "PASS — Honda_Panasonic: 2 rows BUY 50MW + SELL 50MW ✓",
+    "E": "FAIL — Total rows: 7 (expected 6, delta 1)",
+    "F": "FAIL — Honda_Sony: SELL=80MW (phantom still present), BUY=40MW",
+    "G": "FAIL — Admin: 1 phantom SonyHonda SELL→Toyota, 1 phantom PanasonicToyota TARGET_BUY (9 total rows)",
+    "H": "PASS — Admin Trade Deals: 9 rows (synthesis ran, no brokerFilter → not skipped) ✓",
+    "I": "INCONCLUSIVE — Log sub-tab doesn't expose per-round Trade Deals drill-in (path: null)"
+  },
+  "consoleStats": {
+    "synthBroker": 980,
+    "synthNetting": 50,
+    "synthSkipped": 0,
+    "symmetry": 0,
+    "dedup": 0
+  },
+  "verdict": "❌ FAIL — Critical checks failed: A, E, F, G",
+  "timestamp": "2026-04-24T07:29:52.875Z"
+}

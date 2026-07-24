@@ -1,0 +1,49 @@
+{
+  "timestamp": "2026-04-23T12:59:38.495Z",
+  "commit": "7022bd7",
+  "panasonicTraders": {},
+  "consoleMessages": {
+    "postFlipSynth": [
+      "[R4G postFlipSynth] Created 2 missing SWAP-side detail rows for UNSOLVED counterparty traders (using resultsRow hub/venue).",
+      "[R4G postFlipSynth] Created 2 missing SWAP-side detail rows for UNSOLVED counterparty traders (using resultsRow hub/venue).",
+      "[R4G postFlipSynth] Created 2 missing SWAP-side detail rows for UNSOLVED counterparty traders (using resultsRow hub/venue).",
+      "[R4G postFlipSynth] Created 2 missing SWAP-side detail rows for UNSOLVED counterparty traders (using resultsRow hub/venue).",
+      "[R4G postFlipSynth] Created 2 missing SWAP-side detail rows for UNSOLVED counterparty traders (using resultsRow hub/venue).",
+      "[R4G postFlipSynth] Created 2 missing SWAP-side detail rows for UNSOLVED counterparty traders (using resultsRow hub/venue).",
+      "[R4G postFlipSynth] Created 2 missing SWAP-side detail rows for UNSOLVED counterparty traders (using resultsRow hub/venue).",
+      "[R4G postFlipSynth] Created 2 missing SWAP-side detail rows for UNSOLVED counterparty traders (using resultsRow hub/venue)."
+    ],
+    "synthesize": [
+      "[R4G synthesize] Created 4 synthetic detail rows from resultsRow buy_from/sell_to text (server omitted counterparty-perspective details).",
+      "[R4G synthesize] Created 4 synthetic detail rows from resultsRow buy_from/sell_to text (server omitted counterparty-perspective details).",
+      "[R4G synthesize] Created 4 synthetic detail rows from resultsRow buy_from/sell_to text (server omitted counterparty-perspective details).",
+      "[R4G synthesize] Created 4 synthetic detail rows from resultsRow buy_from/sell_to text (server omitted counterparty-perspective details).",
+      "[R4G synthesize] Created 4 synthetic detail rows from resultsRow buy_from/sell_to text (server omitted counterparty-perspective details).",
+      "[R4G synthesize] Created 4 synthetic detail rows from resultsRow buy_from/sell_to text (server omitted counterparty-perspective details).",
+      "[R4G synthesize] Created 4 synthetic detail rows from resultsRow buy_from/sell_to text (server omitted counterparty-perspective details).",
+      "[R4G synthesize] Created 4 synthetic detail rows from resultsRow buy_from/sell_to text (server omitted counterparty-perspective details).",
+      "[R4G synthesize] Created 4 synthetic detail rows from resultsRow buy_from/sell_to text (server omitted counterparty-perspective details).",
+      "[R4G synthesize] Created 4 synthetic detail rows from resultsRow buy_from/sell_to text (server omitted counterparty-perspective details).",
+      "[R4G synthesize] Created 4 synthetic detail rows from resultsRow buy_from/sell_to text (server omitted counterparty-perspective details).",
+      "[R4G synthesize] Created 4 synthetic detail rows from resultsRow buy_from/sell_to text (server omitted counterparty-perspective details).",
+      "[R4G synthesize] Created 4 synthetic detail rows from resultsRow buy_from/sell_to text (server omitted counterparty-perspective details).",
+      "[R4G synthesize] Created 4 synthetic detail rows from resultsRow buy_from/sell_to text (server omitted counterparty-perspective details).",
+      "[R4G synthesize] Created 4 synthetic detail rows from resultsRow buy_from/sell_to text (server omitted counterparty-perspective details).",
+      "[R4G synthesize] Created 4 synthetic detail rows from resultsRow buy_from/sell_to text (server omitted counterparty-perspective details).",
+      "[R4G synthesize] Created 4 synthetic detail rows from resultsRow buy_from/sell_to text (server omitted counterparty-perspective details).",
+      "[R4G synthesize] Created 4 synthetic detail rows from resultsRow buy_from/sell_to text (server omitted counterparty-perspective details).",
+      "[R4G synthesize] Created 4 synthetic detail rows from resultsRow buy_from/sell_to text (server omitted counterparty-perspective details).",
+      "[R4G synthesize] Created 4 synthetic detail rows from resultsRow buy_from/sell_to text (server omitted counterparty-perspective details).",
+      "[R4G synthesize] Created 4 synthetic detail rows from resultsRow buy_from/sell_to text (server omitted counterparty-perspective details).",
+      "[R4G synthesize] Created 4 synthetic detail rows from resultsRow buy_from/sell_to text (server omitted counterparty-perspective details).",
+      "[R4G synthesize] Created 4 synthetic detail rows from resultsRow buy_from/sell_to text (server omitted counterparty-perspective details).",
+      "[R4G synthesize] Created 4 synthetic detail rows from resultsRow buy_from/sell_to text (server omitted counterparty-perspective details)."
+    ],
+    "symmetry": []
+  },
+  "regressionChecks": {
+    "adminSolved": "CLEAN",
+    "hondaSony": "SYMMETRIC"
+  },
+  "verdict": "PANASONIC_SYMMETRIC: YES"
+}
