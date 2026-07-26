@@ -84,8 +84,13 @@ This applies to ALL tasks — coding, research, content, infrastructure, analysi
 | Infrastructure, Docker, SSH, servers | **olaf** | Sonnet, ops |
 | Research, analysis, market, business plan | **rob** | Haiku, analyst |
 | Marketing, content, copywriting, landing text | **lalo** | Sonnet, marketer |
-| Quick tasks, conversion, formatting, scripts | **tuco** | Haiku, fast executor |
 | Adversarial code review, second opinion on code | **codex** | GPT-5.5, independent reviewer |
+
+### ⚠️ Tuco — NOT a general-purpose fallback (updated 2026-07-27)
+
+Tuco was reassigned to **client support only** (external clients via the `chatbox` app → `@TucoSalamanka_bot`, see `agents/tuco/CLAUDE.md`) and is no longer "quick tasks, conversion, formatting, scripts." **Do not delegate git commits/pushes, infrastructure work, config changes, or any other admin/dev task to Tuco** — this row was removed from the table above on purpose, not by omission. If a quick/rote task needs an owner, ask Alex who should take it, or handle it yourself if truly trivial.
+
+(Incident that prompted this: 2026-07-24, Tuco was delegated 3 separate git commit/push tasks as part of a "commit everything" sweep — one of them touched a repo containing a live private SSH key. Tuco complied silently each time since his own rules technically allow coordinator-issued admin tasks — the gap was here, in routing, not in his rules.)
 
 ## Workflow Templates
 
