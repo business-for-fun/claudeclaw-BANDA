@@ -7,9 +7,17 @@
 # any changes to git.
 #
 # Routing by workflow name prefix:
-#   - Name contains "LIMO" → projects/limo/workflows/
-#   - Name contains "FAM"  → projects/fam/workflows/
-#   - Everything else      → projects/r4g/workflows/
+#   - Name contains "LIMO"    → projects/limo/workflows/
+#   - Name contains "FAM"     → projects/fam/workflows/
+#   - Name contains "AGENTPM" → projects/agentpm/workflows/
+#   - Name contains "IPA"     → projects/ipa/workflows/
+#   - Everything else         → projects/r4g/workflows/
+#
+# NOTE: the r4g n8n server (10.128.0.5) hosts workflows for multiple
+# unrelated things beyond R4G itself (AgentPM/IPA routed out above; also
+# assorted YCA_*, Majordom/EXECUTOR_*, and generic scratch/test workflows
+# that don't have a clear project home yet — those still fall through to
+# r4g/workflows/ as of 2026-07-26 pending a decision on where they belong).
 #
 # Usage:
 #   bash scripts/backup-n8n-workflows.sh          # run manually
@@ -37,8 +45,10 @@ SERVERS=(
 R4G_DIR="$PROJECT_ROOT/projects/r4g/workflows"
 LIMO_DIR="$PROJECT_ROOT/projects/limo/workflows"
 FAM_DIR="$PROJECT_ROOT/projects/fam/workflows"
+AGENTPM_DIR="$PROJECT_ROOT/projects/agentpm/workflows"
+IPA_DIR="$PROJECT_ROOT/projects/ipa/workflows"
 
-mkdir -p "$R4G_DIR" "$LIMO_DIR" "$FAM_DIR"
+mkdir -p "$R4G_DIR" "$LIMO_DIR" "$FAM_DIR" "$AGENTPM_DIR" "$IPA_DIR"
 
 TOTAL_EXPORTED=0
 TOTAL_CHANGED=0
@@ -61,6 +71,10 @@ route_workflow() {
     echo "$LIMO_DIR"
   elif echo "$name_upper" | grep -q "FAM"; then
     echo "$FAM_DIR"
+  elif echo "$name_upper" | grep -q "AGENTPM"; then
+    echo "$AGENTPM_DIR"
+  elif echo "$name_upper" | grep -q "IPA"; then
+    echo "$IPA_DIR"
   else
     echo "$R4G_DIR"
   fi
@@ -194,5 +208,7 @@ Auto-exported $count workflow(s) from n8n servers.
 commit_workflows "$R4G_DIR" "r4g"
 commit_workflows "$LIMO_DIR" "limo"
 commit_workflows "$FAM_DIR" "fam"
+commit_workflows "$AGENTPM_DIR" "agentpm"
+commit_workflows "$IPA_DIR" "ipa"
 
 log "=== Backup complete ==="
