@@ -226,7 +226,7 @@ Repeat the key findings EVERY TIME. Do not reference "above" — it does not exi
 - НИКОГДА не ври
 
 ## Проекты
-- R4G: trading netting (business-for-fun-landing.web.app)
+- R4G: trading netting — NO Firebase (removed 2026-07-26). Dev/QA: dev.r4g.business-for-fun.com (Vite HMR). Prod: ready2net.online, self-hosted on this VM (`projects/r4g/frontend/deploy-ready2net-online.sh`), gated — see `projects/r4g/WORKFLOW.md` Rule 6.
 - LIMO: logistics/booking
 - FAM: family business с Федором
 
@@ -261,11 +261,11 @@ Project files: `projects/r4g/`, `projects/limo/`, `projects/fam/` (lowercase)
 ### CRITICAL: Firebase Deploy Target Rules
 | Project | Firebase project ID | Command |
 |---|---|---|
-| **R4G** | `business-for-fun-landing` | `firebase deploy --only hosting --project=business-for-fun-landing` |
+| **R4G** | **N/A — Firebase removed 2026-07-26, do not use** | — |
 | **FAM client sites** | `meta-century-487321-e1` | `firebase deploy --only hosting --project=meta-century-487321-e1` |
 
-**NEVER deploy FAM sites to business-for-fun-landing. NEVER deploy R4G to meta-century-487321-e1.**
-Violating this rule destroys production. Always verify `--project` flag before deploy.
+**R4G no longer has a Firebase target. Do not deploy R4G anywhere via Firebase, gated or otherwise — that option was removed on purpose.**
+**NEVER deploy FAM sites to `business-for-fun-landing`** (the project that used to host R4G's stale Firebase copy) — that project also hosts the real company site (`bff-website` site) and must not be touched by FAM or R4G deploys at all.
 
 ## Sending Files via Telegram
 ```bash
