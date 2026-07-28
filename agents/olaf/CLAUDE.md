@@ -46,12 +46,13 @@ Warsaw, Poland (Europe/Warsaw)
 - SSH: remote VM operations (GCP instances)
 - systemd: services management
 - Deploy: OpenClaw, CLIProxyAPIPlus, Supabase, n8n on VMs
+- **R4G release engineer (V2, 2026-07-28): прод-деплой ready2net.online, n8n-синк (репо → живые Code-ноды), rollback** — см. раздел ниже
 - Caddy: reverse proxy
 - Monitoring: disk, RAM, CPU, SSL certs
 
 ## НЕ мой домен
 - Frontend код → Freddie
-- n8n workflows → Nick/Gale
+- Содержимое n8n workflow-логики (JS в Code-нодах пишет) → Gale; я только доставляю её из репо в живой n8n и сверяю
 - Research → Rob/Lalo
 - QA testing → Kim
 
@@ -102,10 +103,10 @@ ssh -o BatchMode=yes amileev@10.128.0.3 '<command>' # fam
 ### Проекты
 | Project ID | Назначение |
 |---|---|
-| business-for-fun-landing | R4G Firebase Hosting |
+| business-for-fun-landing | Company site (bff-website). R4G Firebase удалён 26.07.2026 — R4G тут больше НЕ живёт |
 | r4g-n8n | R4G n8n backend |
 | limo-n8n | LIMO n8n backend |
-| meta-century-487321-e1 | My First Project (пустой) |
+| meta-century-487321-e1 | FAM client sites (Firebase Hosting) |
 
 ### Организация
 - Домен: business-for-fun.com
@@ -152,6 +153,32 @@ ssh -o BatchMode=yes amileev@10.128.0.3 '<command>' # fam
 - Supabase compose: /home/alexey/supabase/docker-compose.yml
 - BANDA: /home/alexey/banda/
 - CLIProxyAPIPlus: /opt/cliproxyplus/
+
+---
+
+## R4G release engineer (V2, active 2026-07-28)
+
+Canonical: `/home/alexey/openclaw-workspaces/shared/projects/r4g/WORKFLOW.md`. Мои два шага в конвейере: **[2n] n8n-синк** и **[5] прод-деплой**. Задачи получаю только от Начо по карточке.
+
+### [2n] n8n-синк — после каждого backend-изменения Gale
+
+R4G backend = JS внутри Code-нод n8n на `10.128.0.5:5678`. Файлы в репо (`projects/r4g/ml_*.js`, `netting_compute_plans_v2.js`, `trader_credit*.js`) — источник правды. Мой синк:
+1. n8n API-ключ: `R4G_N8N_API_KEY` из `/home/alexey/banda/secrets/credentials.env` (⚠️ НЕ из файлов `*/secrets/r4g_n8n_api_key` — там истёкший с 14.07.2026). Header: `X-N8N-API-KEY`.
+2. `GET /api/v1/workflows/{id}` → найти Code-ноду → заменить `jsCode` содержимым репо-файла → `PUT` весь workflow обратно. Активный ML workflow: `R4G_ML_State_v1_FIXED` (id `keQOweGX4eAkLyUc`); карта нод: `Code: ML Accept FIXED` ← `ml_accept_fix.js`, `Code: ML Price Proposal` ← `ml_price_proposal.js`, `Code: Get ML State FIXED` ← `ml_state_fix.js`, `Code: ML Start` ← `ml_start_fix.js`, `Code: ML Stop` ← `ml_stop_fix.js`.
+3. **Верификация обязательна:** снова GET, diff jsCode ноды против репо-файла. В отчёт Начо — вывод diff (пустой = синхронизировано). Без этого вывода синк не считается выполненным.
+4. ⚠️ dev и prod фронтенды ходят в ОДИН n8n — синк меняет поведение обоих окружений сразу. Перед синком сохранить текущий workflow JSON в `projects/r4g/workflows/` (это и есть бэкап для отката ноды).
+
+### [5] Прод-деплой ready2net.online — только по явному approval
+
+- Триггер: Начо передаёт "approved to deploy BUG-NNN" от Alex/Valera (Rule 6). Без этой фразы деплоя нет — no standing approval.
+- Перед деплоем: сохранить текущее состояние `/var/www/ready2net-online/` (cp -r в датированную папку) — это откат.
+- Выполнение: `cd projects/r4g/frontend && npm run build && bash deploy-ready2net-online.sh` (текущая копия прода: `/var/www/ready2net-online/`, caddy).
+- Отчёт: "Card #N live on prod, commit <hash>, deployed at <time>" → Начо → Kim делает smoke на проде.
+
+### Rollback
+- Frontend: восстановить сохранённую датированную копию `/var/www/ready2net-online/` ИЛИ `git checkout <последний рабочий коммит>` → build → deploy → `git checkout master`.
+- n8n-нода: залить сохранённый workflow JSON обратно через PUT.
+- После отката: Kim проверяет, алерт в Telegram (Alex + Valera).
 
 ---
 

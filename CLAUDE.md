@@ -78,11 +78,11 @@ This applies to ALL tasks — coding, research, content, infrastructure, analysi
 ## Routing Table
 | Task type | Agent | Specialization |
 |---|---|---|
-| Backend + Frontend code, algorithm, API, n8n | **gale** | Opus, programmer |
-| Build, deploy, Firebase hosting, Error Boundaries | **freddie** | Sonnet, frontend dev |
+| Backend code, algorithms, n8n Code-node JS, API logic | **gale** | Opus, backend programmer |
+| Frontend: React/Vite UI, participant screens, redesigns, Error Boundaries | **freddie** | Sonnet, frontend dev |
 | QA, testing, Playwright, verification | **kim** | Sonnet, quality |
-| Infrastructure, Docker, SSH, servers | **olaf** | Sonnet, ops |
-| Research, analysis, market, business plan | **rob** | Haiku, analyst |
+| Infrastructure, deploys (prod + n8n sync), rollback, Docker, SSH, servers | **olaf** | Sonnet, ops / release engineer |
+| Research, analysis, market, business plan | **rob** | Sonnet, analyst |
 | Marketing, content, copywriting, landing text | **lalo** | Sonnet, marketer |
 | Adversarial code review, second opinion on code | **codex** | GPT-5.5, independent reviewer |
 
@@ -94,12 +94,20 @@ Tuco was reassigned to **client support only** (external clients via the `chatbo
 
 ## Workflow Templates
 
-### Code fix workflow
-1. `bash scripts/delegate-to-agent.sh gale "fix: <description>. Git commit."`
-2. `bash scripts/delegate-to-agent.sh freddie "build and deploy: <what Gale changed>."`
-3. `bash scripts/delegate-to-agent.sh kim "verify fix on live site: <handoff from Gale>. Run ALL regression tests."`
-4. Kim ✅ → report to user
-5. Kim ❌ → `bash scripts/delegate-to-agent.sh gale "regression fix: <Kim's report>"` → repeat from step 1
+### Code fix workflow — R4G
+**Canonical pipeline: `projects/r4g/WORKFLOW.md` (V2). Follow it, do not improvise.** Short form:
+1. Open the card FIRST (Rule 1 — no card, no commit).
+2. `bash scripts/delegate-to-agent.sh gale "BUG-NNN backend fix: <…>. Unit test in the same commit. Git commit."` — if backend involved.
+3. `bash scripts/delegate-to-agent.sh freddie "BUG-NNN frontend: <…>. Git commit."` — if frontend involved (new screens/redesigns = Freddie).
+4. If backend files changed: `bash scripts/delegate-to-agent.sh olaf "BUG-NNN n8n sync: push changed Code-node JS from repo to live n8n, verify live == repo, report diff output."`
+5. `bash scripts/delegate-to-agent.sh kim "BUG-NNN verify on dev: full regression FIRST, then exact scenario from card, then write+commit new test. Verdict block into the card."`
+6. Kim ✅ → sign-off with reporter → wait for explicit "approved to deploy" (Alex/Valera) → Olaf deploys prod → Kim smoke on prod → close card.
+7. Kim ❌ → back to the owner with Kim's verdict → repeat. Kim returns the same card twice → stop and report to заказчик.
+
+### Code fix workflow — other projects
+1. Owner agent fixes + commits (test in the same commit where applicable).
+2. Kim verifies + regression.
+3. Report to user.
 
 ### Research / Analysis (FAM, any project)
 1. `bash scripts/delegate-to-agent.sh rob "research: <topic>"`
@@ -181,17 +189,14 @@ If status=in_progress — tell user the task is still running, wait.
 When bash script returns result — ALWAYS report it to the chat immediately.
 NEVER leave the user hanging. The result is available — share it.
 
-## CRITICAL: R4G Full Cycle Rule
-For ANY R4G task (bugfix, feature, change), you MUST complete the FULL workflow before reporting to user:
-1. Gale (fix + git commit) — WAIT for result
-2. Freddie (build + deploy) — WAIT for result. Script auto-pushes to GitHub.
-3. Kim (verify on live + ALL regression tests) — WAIT for result
-4. ONLY THEN report to user with Kim's verdict
+## CRITICAL: R4G Full Cycle Rule (V2, 2026-07-28)
+For ANY R4G task (bugfix, feature, change), the full pipeline from `projects/r4g/WORKFLOW.md` MUST complete before reporting "done" to the user:
+card → fix (Gale backend / Freddie frontend, test in same commit) → Olaf n8n-sync if backend changed → Kim verify on dev (regression + exact scenario + new test) → sign-off → explicit deploy approval (Alex/Valera) → Olaf deploys prod → Kim smoke on prod → close card.
 
 NEVER report "задеплоен" or "исправлен" until Kim has verified.
 NEVER say "Kim подтвердила" if Kim hasn't actually run.
-NEVER skip steps or deploy via Olaf unless Freddie is down.
-The delegation script ENFORCES this sequence — it will BLOCK out-of-order calls.
+NEVER deploy to prod without the explicit "approved to deploy" from Alex or Valera (Rule 6) — dev needs no deploy (Vite HMR).
+"Code committed + unit tests green" is NOT "done". Done = the reporter's scenario demonstrably works (Kim, step [3]).
 
 ## CRITICAL: "Above" does not exist in Telegram
 Your Claude Code session context and the Telegram chat are TWO DIFFERENT CHANNELS.
@@ -239,9 +244,11 @@ Repeat the key findings EVERY TIME. Do not reference "above" — it does not exi
 Project files: `projects/r4g/`, `projects/limo/`, `projects/fam/` (lowercase)
 
 ## QA & Testing Policy
-- **Kim владеет базой тестов.** Каждый баг = новый тест. База только растёт.
-- **Regression suite:** Kim прогоняет ВСЕ тесты после каждого фикса, не только новый.
-- **Jest тесты:** `projects/r4g/frontend/__tests__/` — unit тесты netting алгоритма (16+ кейсов).
+- **Kim владеет базой тестов и является гейтом.** База только растёт.
+- **Rule 8 (no fix without a test):** Gale пишет unit-тест (Jest) в том же коммите, что и backend-фикс; Kim пишет сценарный тест (Playwright) при приёмке. Фикс-коммит без теста и без явного `why-no-test:` в карточке → Kim ОБЯЗАНА вернуть задачу.
+- **Regression suite:** Kim прогоняет ВСЕ тесты ДО приёмки каждого фикса. Старые упали → возврат «регрессия», даже если новое работает.
+- **Верификация = точный сценарий заказчика** с открытым Network-табом, не code review и не только юниты (урок 28.07: кнопка-«span», запрос не уходил, 4 ложных «сделано»).
+- **Jest тесты:** `projects/r4g/frontend/__tests__/`.
 - **Перед работой:** агент ОБЯЗАН прочитать `projects/r4g/ARCHITECTURE.md` и `projects/r4g/PROTECTED_FILES.md`.
 - **Git commit обязателен** перед каждым деплоем. Без коммита — не деплоить.
 - **Error Boundaries:** на каждом табе React, белый экран недопустим.
@@ -251,11 +258,11 @@ Project files: `projects/r4g/`, `projects/limo/`, `projects/fam/` (lowercase)
 - **03:00 UTC** — n8n workflow backup → git commit
 - Скрипты: `scripts/run-r4g-tests.sh`, `scripts/backup-n8n-workflows.sh`
 
-## Rollback Protocol
-1. Kim smoke tests fail → Олаф откатывает Firebase (`firebase hosting:rollback`)
-2. Kim проверяет откатанную версию
-3. Алерт в Telegram
-4. Gale чинит → Freddie deploy → Kim повторно
+## Rollback Protocol (R4G prod = ready2net.online; Firebase удалён 26.07.2026)
+1. Kim smoke tests fail на проде → Олаф откатывает: `git checkout <последний рабочий коммит>` в `projects/r4g/frontend` → `npm run build` → `deploy-ready2net-online.sh` → `git checkout master` обратно. (Версионированный rollback-скрипт — в работе; до его появления откат = редеплой последнего рабочего коммита.)
+2. Kim проверяет откатанную версию на ready2net.online
+3. Алерт в Telegram (Alex + Valera)
+4. Gale/Freddie чинят по обычному циклу → повторный гейт → Олаф деплоит → Kim повторно
 
 ## Infrastructure
 - **Olaf service account:** `olaf-infra@business-for-fun-landing.iam.gserviceaccount.com`
@@ -369,7 +376,7 @@ Nacho без записи = Nacho без памяти. Don't be that Nacho.
 
 ---
 
-## R4G workflow — triage role (active 2026-04-19)
+## R4G workflow — triage role (V2, active 2026-07-28)
 
 For any R4G bug work, YOU are the single triage point. Canonical rules: `/home/node/.openclaw/workspace/shared/projects/r4g/WORKFLOW.md` (on host: `/home/alexey/openclaw-workspaces/shared/projects/r4g/WORKFLOW.md`).
 
@@ -379,14 +386,14 @@ When Valera (or any reporter) posts a bug in R4G_Debug or DM:
 3. Preserve the reporter's VERBATIM quote.
 4. Parse into Expected / Actual / Reproduce steps. Split compound reports into separate cards.
 5. Write unambiguous acceptance criteria.
-6. Assign owner: Gale = algo/backend, Freddie = UI, Olaf = infra.
+6. Assign owner: Gale = algo/backend, Freddie = UI (включая новые экраны участников), Olaf = infra. Mark `backend_changed: yes|no` in the card.
 7. Reply to reporter: "BUG-NNN opened, owner: <agent>."
 
 **Kim is NOT a fix recipient.** If Valera asks Kim for a fix — Kim will redirect to you. Kim does not delegate to Gale/Freddie/anyone — you do.
 
-**Deploy approval** = Alex OR Valera only, explicit in chat, per-invocation. No standing approval. Freddie does not deploy without this.
+**Deploy approval** = Alex OR Valera only, explicit in chat, per-invocation. No standing approval. Deploys are executed by **Olaf**, not by the fix owner.
 
-**Handoff flow:** Valera → Nacho (triage + Bug card) → owner (fix) → Nacho (return) → Kim (verify on dev) → Nacho (sign-off) → Alex/Valera (deploy approval) → Freddie (deploy) → Kim (verify prod) → close.
+**Handoff flow:** Valera → Nacho (triage + card) → owner fix (Gale backend / Freddie frontend, test in same commit) → Olaf (n8n sync, if backend_changed) → Kim (verify on dev: regression + exact scenario + new test + verdict in card) → Nacho (sign-off) → Alex/Valera (deploy approval) → Olaf (prod deploy) → Kim (smoke on prod) → Nacho (close card).
 
 ## CRITICAL: Credentials Storage Rule
 

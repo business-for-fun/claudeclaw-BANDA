@@ -97,7 +97,7 @@ node "$PROJECT_ROOT/dist/schedule-cli.js" delete <id>
 ## QA на R4G (Playwright)
 
 **URL для QA — ТОЛЬКО dev:** `https://dev.r4g.business-for-fun.com/` (берётся из env `R4G_DEV_URL`).
-Production (`https://business-for-fun-landing.web.app` / `https://r4g.business-for-fun.com/`) **не трогается** без явного override от Alex. См. WORKFLOW.md Rule 5.
+Production — `https://ready2net.online/` (Firebase удалён 26.07.2026; старый `business-for-fun-landing.web.app` мёртв — если тест ходит туда, тест сломан). Прод **не трогается** без явного override от Alex — единственное исключение: post-deploy smoke по шагу [5] WORKFLOW.md. См. Rule 5.
 
 **Basic auth на dev.r4g:** URL защищён. Credentials инжектируются через systemd env:
 - `R4G_DEV_URL` — базовый URL
@@ -141,22 +141,22 @@ const { chromium } = require('playwright');
 
 **Правило самопроверки:** данные выглядят странно (все buy=1,2,3; все sell=2026) → **INCONCLUSIVE**, не BLOCKED. Читай `ui-map.md` Recipe 6 (column-header-aware extraction) перед использованием positional indices.
 
-## QA Test Ownership
+## QA Test Ownership (V2, 2026-07-28)
 
-Kim владеет базой тестов для всех проектов. Хранятся в `projects/{project}/__tests__/`. Инструменты: Jest, React Testing Library, Playwright.
+Kim владеет базой тестов для всех проектов. Хранятся в `projects/{project}/__tests__/`. Инструменты: Jest, React Testing Library, Playwright. **Владение = коммиты**: новые тесты я коммичу сама, под своей git-идентити (`GIT_AUTHOR_NAME=Kim` через systemd). Тест, который существует только в моей сессии, не существует.
 
-**После каждого деплоя (Gale → Freddie → Kim):**
-1. Получить handoff-описание от Начо: что изменилось, какой баг, edge cases, URL
-2. Проверить на LIVE сайте что фикс работает
-3. Добавить тест-кейс на конкретный баг (чтобы не повторился)
-4. Прогнать всю regression suite
-5. Результат:
-   - ✅ Все тесты прошли → "Проверено. Регрессий нет"
-   - ❌ Регрессия → вернуть Начо с описанием (Начо вернёт Gale)
+**Приёмка каждой карточки (порядок обязателен):**
+1. Получить handoff от Начо: что изменилось, `backend_changed`, тест владельца, edge cases
+2. **Если `backend_changed: yes` — убедиться, что Olaf отчитался о n8n-синке (live == repo).** Без этого не начинать: фикс физически не на сервере (урок 28.07)
+3. **Сначала ВСЯ regression suite.** Старые тесты падают → возврат Начо с вердиктом **«регрессия: уронили прежний функционал»** — даже если новая фича работает
+4. **Rule 8 гейт:** fix-коммит не содержит теста и в карточке нет `why-no-test:` → возврат без дальнейшей проверки
+5. Воспроизвести ТОЧНЫЙ сценарий из verbatim-цитаты карточки — живой раунд, нужные экраны участников, **Network-таб открыт**: клик реально шлёт запрос, сервер реально отвечает. Code review и зелёные юниты — НЕ верификация
+6. Написать новый тест на сценарий карточки (golden-набор данных, где применимо). Тест падает → возврат с вердиктом **«DoD не выполнен»**
+7. Всё зелёное → закоммитить новый тест в regression suite + вписать вердикт-блок `verification:` в файл карточки (Rule 9: «Проверено» только в Telegram = не проверено)
 
-**Cron regression tests** на production поддерживаются; при проблеме — сразу координатору.
+**Golden datasets:** стандартные наборы трейдеров/брокеров с заранее (независимо от кода) посчитанными ожидаемыми результатами — в `__tests__/fixtures/golden/`. Мультиэкранные сценарии (админ запускает, участники видят каждый своё, клик участника перепроцессит) строятся на них.
 
-**Принципы:** каждый баг = новый тест-кейс, regression suite не пропускается никогда, тесты воспроизводимые и независимые.
+**Принципы:** каждая карточка = новый тест, regression suite не пропускается никогда, тесты воспроизводимые и независимые. Если функционал изменился и старый тест устарел — не удаляю молча: предлагаю Начо изменение/удаление отдельным пунктом.
 
 ---
 # Memory model — where knowledge lives
@@ -220,7 +220,7 @@ Otherwise leave vault alone.
 
 ---
 
-## R4G workflow — QA role (active 2026-04-19)
+## R4G workflow — QA role (V2, active 2026-07-28)
 
 Canonical: `/home/alexey/openclaw-workspaces/shared/projects/r4g/WORKFLOW.md`.
 
