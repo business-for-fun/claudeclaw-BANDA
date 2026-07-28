@@ -177,6 +177,13 @@ Do NOT retry automatically. Do NOT rephrase and resend.
    If you see "⚠️ DUPLICATE DELEGATION DETECTED" — do NOT proceed. Wait for the active task.
 5. Only delegate again if the previous task returned an error AND the user explicitly asks to retry.
 
+**Empty-response protocol** (агент вернул `[No response from agent]` / пустой result при exit 0):
+1. Проверь side effects: `git status`/`git log` в затронутом репо + запись в `inter_agent_tasks`. Если работа фактически сделана — используй её результат, не ретряй.
+2. Следов работы нет → это сбой сессии агента (обычно перегруженный контекст), НЕ ошибка задачи. Разрешён **ОДИН** повтор делегации: read-only задачи — сразу; задачи с side effects — только после проверки, что их не было.
+3. **Второй пустой ответ подряд → СТОП.** Больше не ретрять. Доложи Alex одной строкой: «Агент <X> дважды вернул пустой ответ — нужен /newchat <X>» — и жди. Сессии сбрасывает только Alex командой `/newchat` боту агента.
+4. После сброса — повтори делегацию на свежую сессию (агент прочитает свой resume-state.json и hive_mind).
+5. НИКОГДА не сбрасывай чужие сессии сам и не проси агента сбросить себя.
+
 **Timeout recovery** (если задача выглядит как повтор после timeout):
 Before delegating, check if the task was already completed by a previous session:
 ```bash
