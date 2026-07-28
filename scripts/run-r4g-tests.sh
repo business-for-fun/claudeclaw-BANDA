@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────
 # R4G Nightly Test Runner
-# Runs Jest test suite, saves results, notifies via Telegram.
+# Runs Jest test suite + n8n sync check (verify-n8n.sh, Rule 10),
+# saves results, notifies via Telegram in ONE morning message.
 #
 # Usage: bash scripts/run-r4g-tests.sh
 # Cron:  0 2 * * * (daily at 02:00 UTC)
@@ -55,6 +56,26 @@ TESTS_PASSED="$(echo "$SUMMARY_LINE" | grep -oP '\d+ passed' | grep -oP '\d+' ||
 TESTS_FAILED="$(echo "$SUMMARY_LINE" | grep -oP '\d+ failed' | grep -oP '\d+' || echo '0')"
 TESTS_TOTAL="$(echo "$SUMMARY_LINE" | grep -oP '\d+ total' | grep -oP '\d+' || echo '0')"
 
+# ── n8n sync check (Rule 10: live nodes == repo files) ──────────
+# --quiet: no separate Telegram alert — the report joins THIS message.
+VERIFY_EXIT=0
+VERIFY_OUTPUT="$(bash "$SCRIPT_DIR/verify-n8n.sh" --quiet 2>&1)" || VERIFY_EXIT=$?
+# Node lines only (drop the header line)
+VERIFY_LINES="$(echo "$VERIFY_OUTPUT" | grep -E '^(✅|❌|❓)' || echo '❓ verify-n8n.sh produced no report')"
+
+{
+  echo ""
+  echo "── n8n sync check (verify-n8n.sh, exit $VERIFY_EXIT) ──"
+  echo "$VERIFY_OUTPUT"
+} >> "$RESULT_FILE"
+
+if [ "$VERIFY_EXIT" -eq 0 ]; then
+  N8N_MSG="🔗 n8n == repo: all nodes synced"
+else
+  N8N_MSG="🔗 <b>n8n ≠ repo</b> (Rule 10 — Olaf sync needed):
+${VERIFY_LINES}"
+fi
+
 # ── Send Telegram notification ──────────────────────────────────
 send_telegram() {
   local message="$1"
@@ -73,6 +94,8 @@ if [ "$TEST_EXIT" -eq 0 ]; then
 ${TESTS_PASSED} tests passed
 ${SUITES_LINE}
 ${TIME_LINE}
+
+${N8N_MSG}
 📅 ${DATE_STAMP}"
   echo "[OK] All tests passed: $TESTS_PASSED/$TESTS_TOTAL"
 else
@@ -85,6 +108,7 @@ ${SUITES_LINE}
 <b>Failed:</b>
 <code>${FAILED_NAMES}</code>
 
+${N8N_MSG}
 📅 ${DATE_STAMP}
 📄 Log: projects/test-results/r4g-jest-${DATE_STAMP}.txt"
   echo "[FAIL] $TESTS_FAILED failed, $TESTS_PASSED passed"
