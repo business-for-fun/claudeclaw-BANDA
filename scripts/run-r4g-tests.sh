@@ -76,6 +76,20 @@ else
 ${VERIFY_LINES}"
 fi
 
+# ── Card hygiene check (step [6] discipline) ────────────────────
+CARDS_EXIT=0
+CARDS_OUTPUT="$(bash "$SCRIPT_DIR/lint-bug-cards.sh" 2>&1)" || CARDS_EXIT=$?
+{
+  echo ""
+  echo "── card hygiene (lint-bug-cards.sh, exit $CARDS_EXIT) ──"
+  echo "$CARDS_OUTPUT"
+} >> "$RESULT_FILE"
+if [ "$CARDS_EXIT" -ne 0 ]; then
+  N8N_MSG="${N8N_MSG}
+
+${CARDS_OUTPUT}"
+fi
+
 # ── Send Telegram notification ──────────────────────────────────
 send_telegram() {
   local message="$1"

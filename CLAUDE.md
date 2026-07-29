@@ -184,6 +184,14 @@ Do NOT retry automatically. Do NOT rephrase and resend.
 4. После сброса — повтори делегацию на свежую сессию (агент прочитает свой resume-state.json и hive_mind).
 5. НИКОГДА не сбрасывай чужие сессии сам и не проси агента сбросить себя.
 
+**Проактивная гигиена сессий:** не жди двух пустых ответов. Симптомы перегруженной
+сессии агента: пустой ответ, упавшая сессия после завершения работы, аномально
+долгие простые задачи. После завершения БОЛЬШОГО цикла (очередь задач, крупная
+фича) или при первом симптоме — предложи Alex одной строкой: «Рекомендую /newchat
+<agent> — <причина>». Работа не теряется: resume-state.json + hive_mind + карточки
+переживают сброс. (Прецеденты 28-29.07: пустой ответ Gale на 223MB сессии,
+падение сессии Kim после e2e-марафона.)
+
 **Timeout recovery** (если задача выглядит как повтор после timeout):
 Before delegating, check if the task was already completed by a previous session:
 ```bash
@@ -241,6 +249,12 @@ Repeat the key findings EVERY TIME. Do not reference "above" — it does not exi
 - Язык: тот же что у собеседника (RU/EN/PL)
 - Кратко — пункты вместо абзацев
 - НИКОГДА не ври
+
+## Commit messages — честность (2026-07-29)
+Сообщение коммита описывает то, что РЕАЛЬНО в diff. Коммитишь бэкап workflow JSON —
+пиши `chore: n8n workflow backup ...`, а не `fix(BUG-NNN): ml_accept_fix.js ...`.
+Префикс `fix:` — только когда в diff код фикса. Твои коммиты — часть аудита;
+лживый message = сломанный аудит (инцидент 5053f92, 2026-07-29).
 
 ## Проекты
 - R4G: trading netting — NO Firebase (removed 2026-07-26). Dev/QA: dev.r4g.business-for-fun.com (Vite HMR). Prod: ready2net.online, self-hosted on this VM (`projects/r4g/frontend/deploy-ready2net-online.sh`), gated — see `projects/r4g/WORKFLOW.md` Rule 6.
@@ -400,6 +414,13 @@ When Valera (or any reporter) posts a bug in R4G_Debug or DM:
 
 **Deploy approval** = Alex OR Valera only, explicit in chat, per-invocation. No standing approval. Deploys are executed by **Olaf**, not by the fix owner.
 
+**Deploy cadence (2026-07-29):** в конце каждого рабочего дня (когда Валера закончил
+раунды, ~вечер) собери список карточек в `verified-dev` и отправь Alex+Валере
+запрос batch-approval: «За сегодня verified-dev: BUG-…, BUG-… Прошу batch-approval
+на деплой ready2net.online». Не давай очереди копиться днями — прод, отстающий от
+dev на 30 фиксов, это инцидент 26-29.07, не повторяем. Approval-гейт при этом
+неизменен: без явного «approved to deploy» деплоя нет.
+
 **Handoff flow:** Valera → Nacho (triage + card) → owner fix (Gale backend / Freddie frontend, test in same commit) → Olaf (n8n sync, if backend_changed) → Kim (verify on dev: regression + exact scenario + new test + verdict in card) → Nacho (sign-off) → Alex/Valera (deploy approval) → Olaf (prod deploy) → Kim (smoke on prod) → Nacho (close card).
 
 ## CRITICAL: Credentials Storage Rule
@@ -408,7 +429,10 @@ When Valera (or any reporter) posts a bug in R4G_Debug or DM:
 
 1. **FIRST action** — before any other work: append to `/home/alexey/banda/secrets/credentials.env`
 2. Format: `KEY=VALUE` (one per line), add comment `# Added: YYYY-MM-DD <description>`
-3. Run: `chmod 600 /home/alexey/banda/secrets/credentials.env`
+3. Run: `chmod 640 /home/alexey/banda/secrets/credentials.env`
+   ⚠️ Именно **640**, НЕ 600: файл принадлежит ubuntu:ubuntu, а агенты работают под amileev
+   (читают через группу ubuntu). chmod 600 обнуляет групповой бит → ACL-маска ---, и весь
+   флот теряет доступ к секретам (инцидент 2026-07-29: verify-n8n молчал полдня).
 4. Confirm in chat: "Credentials saved to secrets/credentials.env"
 
 **This applies to ALL agents.** Include this instruction in every delegation prompt where credentials may be involved.
