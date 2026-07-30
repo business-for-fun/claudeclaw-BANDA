@@ -50,6 +50,7 @@ MAP=(
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
+ROOT_EXPECTED="$PROJECT_ROOT/store/verify-n8n-expected.txt"
 
 fetch_workflow() { # $1=id → $TMP/wf_$1.json (cached)
   local id="$1"
@@ -93,8 +94,15 @@ PYEOF
   if [ "$DIFF_LINES" -eq 0 ]; then
     REPORT+="✅ $short == '$node_name'"$'\n'
   else
-    REPORT+="❌ $short vs '$node_name': $DIFF_LINES diff lines"$'\n'
-    DIVERGED=1
+    # Expected-divergence allowlist: store/verify-n8n-expected.txt,
+    # format: "<repo basename>  <reason/card>". Managed by Alex/host only.
+    EXPECTED_REASON="$(grep -m1 "^$short" "$ROOT_EXPECTED" 2>/dev/null | cut -d' ' -f2- || true)"
+    if [ -n "$EXPECTED_REASON" ]; then
+      REPORT+="🟡 $short vs '$node_name': $DIFF_LINES diff lines — EXPECTED ($EXPECTED_REASON)"$'\n'
+    else
+      REPORT+="❌ $short vs '$node_name': $DIFF_LINES diff lines"$'\n'
+      DIVERGED=1
+    fi
   fi
 done
 
@@ -110,10 +118,11 @@ if [ "$EXIT" -ne 0 ] && [ "$QUIET" != "--quiet" ] && [ -n "${TELEGRAM_BOT_TOKEN:
   [ "$ERRORS" -eq 1 ] && HEADER="🔴 <b>R4G n8n check errors</b>"
   MSG="$HEADER
 $REPORT
-Fix path: repo is source of truth → Olaf syncs per WORKFLOW.md [2n].
-Open cards: bugs/TASK-20260728-00{1,2,3}.md"
-  # Alex DM + R4G_Dev_Claude group — same targets as nightly jest alert
-  for cid in 6655962301 -1003599340365; do
+Это ИНФОРМАЦИЯ, не команда: расхождение НЕ означает «синкай». Любой синк —
+только по открытой карточке и по команде Alex (Rule 6/10)."
+  # Alex DM ONLY. (До 30.07 тут был -1003599340365 из легаси-комментария
+  # «R4G_Dev_Claude» — на деле это Auto_Dev_Claude, ДРУГОЙ проект.)
+  for cid in 6655962301; do
     curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
       -d "chat_id=${cid}" \
       --data-urlencode "text=${MSG}" \
