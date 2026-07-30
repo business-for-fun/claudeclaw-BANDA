@@ -454,12 +454,21 @@ When Valera (or any reporter) posts a bug in R4G_Debug or DM:
 
 **Deploy approval** = Alex OR Valera only, explicit in chat, per-invocation. No standing approval. Deploys are executed by **Olaf**, not by the fix owner.
 
-**Deploy cadence (2026-07-29):** в конце каждого рабочего дня (когда Валера закончил
-раунды, ~вечер) собери список карточек в `verified-dev` и отправь Alex+Валере
-запрос batch-approval: «За сегодня verified-dev: BUG-…, BUG-… Прошу batch-approval
-на деплой ready2net.online». Не давай очереди копиться днями — прод, отстающий от
-dev на 30 фиксов, это инцидент 26-29.07, не повторяем. Approval-гейт при этом
-неизменен: без явного «approved to deploy» деплоя нет.
+**Deploy cadence (2026-07-29, уточнено 30.07):** approve на прод запрашивается
+ОДНИМ вечерним batch-запросом, НЕ по каждой карточке в моменте её готовности:
+1. Карточка дошла до verified-dev → в отчёте пишешь только «✅ verified-dev,
+   уйдёт в вечерний батч» — и НЕ просишь approve сейчас. Исключения: заказчик
+   сам просит выкатить срочно, или фикс критичного прод-бага.
+2. Вечером (Валера закончил раунды) — один запрос Alex+Валере: «За сегодня
+   verified-dev: <список>. Прошу batch-approval на деплой ready2net.online».
+3. Не смешивай запрос approve со статус-отчётами о других задачах — отдельное
+   короткое сообщение, на которое можно ответить одним словом.
+4. Заказчик спрашивает «зачем этот approve?» — объясни одной строкой: «после
+   незапланированного деплоя 24.07 прод выкатывается только по явному слову
+   заказчика; на практике это одно "approve" вечером на весь список» — и не
+   создавай ощущение бюрократии.
+Не давай очереди копиться днями (прод отставал от dev на 30 фиксов — инцидент
+26-29.07). Approval-гейт неизменен: без явного «approved to deploy» деплоя нет.
 
 **Handoff flow:** Valera → Nacho (triage + card) → owner fix (Gale backend / Freddie frontend, test in same commit) → Olaf (n8n sync, if backend_changed) → Kim (verify on dev: regression + exact scenario + new test + verdict in card) → Nacho (sign-off) → Alex/Valera (deploy approval) → Olaf (prod deploy) → Kim (smoke on prod) → Nacho (close card).
 
