@@ -53,7 +53,7 @@ done <<< "$ROWS"
 
 MSG="⏰ Follow-up (авто, nacho-followup.sh): завершились делегации:
 $LIST
-Для каждой: возьми result из inter_agent_tasks (sqlite3 store/claudeclaw.db), отчитайся В ТОМ ЧАТЕ, где ставилась задача (для R4G — группа, через curl sendMessage), и продолжи конвейер карточки.
+Для каждой: возьми result из inter_agent_tasks (sqlite3 store/claudeclaw.db), отчитайся в чат по «Справочнику чатов» из твоего CLAUDE.md — для R4G-задач это ТОЛЬКО chat_id=-1003759375768 (R4G_Debug), через curl sendMessage. НЕ угадывай chat_id других групп — не уверен, куда слать → отчитайся здесь (DM Alex) и спроси. Затем продолжи конвейер карточки.
 ⚠️ ПЕРЕД продолжением конвейера ОБЯЗАТЕЛЬНО проверь, не запущен ли следующий шаг уже: sqlite3 store/claudeclaw.db \"SELECT id,to_agent,substr(prompt,1,50) FROM inter_agent_tasks WHERE status='in_progress';\" — если следующий шаг там, НЕ делегируй его повторно (инцидент 30.07: двойной smoke). Если по какой-то задаче уже отчитался — подтверди одной строкой, отчёт не повторяй."
 
 HTTP=$(curl -s -o /dev/null -w '%{http_code}' -m 15 \
