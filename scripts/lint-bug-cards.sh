@@ -12,7 +12,7 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-BUGS_DIR="$SCRIPT_DIR/../projects/r4g/bugs"
+BUGS_DIR="$SCRIPT_DIR/../projects/r4g/cards"
 
 # Cards older than V2 (2026-07-28) are legacy backlog — counted, not linted.
 # Their cleanup is a separate planned task, not daily noise.

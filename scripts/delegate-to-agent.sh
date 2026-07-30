@@ -28,9 +28,21 @@
 #   kim   — Ким Уэксслер (Sonnet) — юрист, ОТК, документы
 #
 # Returns: agent's response text (stdout), exit code 0 on success
+#
+# Enforcement V2 (2026-07-30): универсальный, per-card гейты + пауза.
+#   - Конфиги проектов: store/enforce/<project>.conf (MODE=warn|enforce).
+#   - Проектная делегация обязана содержать BUG-/TASK-/FEAT-ID карточки.
+#   - store/PAUSE_ALL → блок всего; store/PAUSE_<PROJECT> → блок проекта.
+#     Паузы всегда enforced; "allow: <ID>" внутри файла — исключения.
+#   - DELEGATE_DRY_RUN=1 — прогнать гарды без реальной делегации.
 # ═══════════════════════════════════════════════════════════════════════
 
 set -euo pipefail
+
+# Детерминированная локаль: кириллица в regex'ах конфигов не должна зависеть
+# от окружения вызывающего (инцидент: "Invalid collation character" тихо
+# превращал матч в не-матч и отключал детект проекта).
+export LC_ALL=C.UTF-8
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="$SCRIPT_DIR/../.env"
@@ -58,6 +70,30 @@ BASE_URL="http://localhost:${DASHBOARD_PORT}"
 # ── Parallel mode ──
 if [ "${1:-}" = "--parallel" ]; then
   TASKS_JSON="${2:-}"
+
+  # PAUSE gate для parallel-режима: per-card гарды тут не применяются
+  # (JSON парсить в bash хрупко), поэтому при активной паузе параллельные
+  # делегации блокируются целиком, без allow-исключений.
+  PAR_STORE="$SCRIPT_DIR/../store"
+  if [ -f "$PAR_STORE/PAUSE_ALL" ]; then
+    echo "🛑 GLOBAL PAUSE (PAUSE_ALL) — parallel-делегация заблокирована." >&2
+    sed 's/^/   /' "$PAR_STORE/PAUSE_ALL" >&2
+    exit 6
+  fi
+  for par_pause in "$PAR_STORE"/PAUSE_*; do
+    [ -e "$par_pause" ] || continue
+    par_project="$(basename "$par_pause" | sed 's/^PAUSE_//' | tr '[:upper:]' '[:lower:]')"
+    par_conf="$SCRIPT_DIR/../store/enforce/${par_project}.conf"
+    par_regex=""
+    [ -f "$par_conf" ] && par_regex="$(grep -m1 '^DETECT_REGEX=' "$par_conf" | cut -d= -f2- | tr -d \'\")"
+    if { [ -n "$par_regex" ] && echo "$TASKS_JSON" | grep -qiE "$par_regex"; } \
+       || echo "$TASKS_JSON" | grep -qi "$par_project"; then
+      echo "🛑 PAUSE ACTIVE [$par_project] — parallel-делегация заблокирована целиком." >&2
+      sed 's/^/   /' "$par_pause" >&2
+      echo "Для разрешённых карточек используй одиночные делегации (allow: работает только там)." >&2
+      exit 6
+    fi
+  done
   # NOTE: 90-min default conflicts with async-first guidance in CLAUDE.md.
   # Long tasks (builds, deploys, tests) MUST pass run_in_background=true to
   # the orchestrator. Sync callers that hit this default will block for 90 min.
@@ -157,67 +193,178 @@ if [ -f "$DB_PATH" ]; then
   fi
 fi
 
-# ── R4G Workflow Enforcement ──
-# Ensures strict Gale → Freddie → Kim sequence for R4G project tasks.
-# Blocks out-of-order delegations and enforces git commit + push before deploy.
-R4G_DIR="$SCRIPT_DIR/../projects/r4g"
+# ═══════════════════════════════════════════════════════════════════
+# Enforcement V2 (2026-07-30) — универсальный, для ВСЕХ проектов.
+# Per-card гейты + механическая пауза. Конфиги: store/enforce/<project>.conf
+# (PROJECT, PROJECT_DIR, CARDS_DIR, DETECT_REGEX, DEPLOY_REGEX, SYNC_REGEX,
+#  CODE_OWNERS, EXECUTORS, VERIFY_AGENTS, MODE=warn|enforce).
+#
+# Паузы (ставит/снимает ТОЛЬКО Alex; всегда enforced, независимо от MODE):
+#   store/PAUSE_ALL          — стоп-кран: блокирует ЛЮБЫЕ делегации
+#   store/PAUSE_<PROJECT>    — блокирует делегации одного проекта
+#   строки "allow: <CARD-ID>" внутри файла — точечные исключения
+#
+# Определение проекта: по ID карточки (в чьём CARDS_DIR лежит файл),
+# иначе по DETECT_REGEX. Задача вне всех проектов гейтам не подлежит.
+# ═══════════════════════════════════════════════════════════════════
+ENFORCE_DIR="$SCRIPT_DIR/../store/enforce"
+STORE_DIR="$SCRIPT_DIR/../store"
+CARD_ID="$(echo "$PROMPT" | grep -oE '(BUG|TASK|FEAT)-20[0-9]{6}-[0-9]{3}' | head -1 || true)"
 
-is_r4g_task() {
-  echo "$PROMPT" | grep -qiE "r4g|netting|frontend|firebase|business-for-fun|Bug #[0-9]|ML Chain|Missing Link|SWAP|broker console|NettingResults|BrokerConsole|Settings\.jsx|App\.jsx"
+# ── GATE −1: GLOBAL PAUSE — раньше всего, для любых делегаций ──
+if [ -f "$STORE_DIR/PAUSE_ALL" ]; then
+  if [ -n "$CARD_ID" ] && grep -q "^allow: $CARD_ID" "$STORE_DIR/PAUSE_ALL"; then
+    echo "ℹ️  PAUSE_ALL active, but $CARD_ID is explicitly allowed." >&2
+  else
+    echo "🛑 GLOBAL PAUSE (PAUSE_ALL) — все делегации заблокированы." >&2
+    sed 's/^/   /' "$STORE_DIR/PAUSE_ALL" >&2
+    echo "Паузу снимает ТОЛЬКО Alex. Разрешено: отвечать в чат и ждать." >&2
+    exit 6
+  fi
+fi
+
+# ── Определение проекта ──
+MATCHED_CONF=""
+CARD_FILE=""
+load_conf() { # sets PROJECT, PROJECT_DIR, CARDS_DIR, regexes, owners, MODE
+  PROJECT=""; PROJECT_DIR=""; CARDS_DIR=""; DETECT_REGEX=""; DEPLOY_REGEX=""
+  SYNC_REGEX=""; CODE_OWNERS=""; EXECUTORS=""; VERIFY_AGENTS=""; MODE="warn"
+  # shellcheck disable=SC1090
+  . "$1"
 }
-
-if is_r4g_task && [ -f "$DB_PATH" ]; then
-  case "$AGENT_ID" in
-    freddie|olaf)
-      # RULE 1: Cannot deploy without Gale's commit first
-      LAST_GALE=$(sqlite3 "$DB_PATH" "
-        SELECT status, completed_at FROM inter_agent_tasks
-        WHERE to_agent = 'gale' AND status = 'completed'
-        ORDER BY completed_at DESC LIMIT 1;
-      " 2>/dev/null)
-      if [ -z "$LAST_GALE" ]; then
-        echo "🚫 R4G WORKFLOW VIOLATION: Cannot deploy without Gale's commit!" >&2
-        echo "   Workflow: Gale (fix+commit) → Freddie (deploy) → Kim (verify)" >&2
-        exit 6
+if [ -d "$ENFORCE_DIR" ]; then
+  if [ -n "$CARD_ID" ]; then
+    for conf in "$ENFORCE_DIR"/*.conf; do
+      [ -e "$conf" ] || continue
+      load_conf "$conf"
+      if [ -f "$SCRIPT_DIR/../$CARDS_DIR/$CARD_ID.md" ]; then
+        MATCHED_CONF="$conf"; CARD_FILE="$SCRIPT_DIR/../$CARDS_DIR/$CARD_ID.md"; break
       fi
-
-      # RULE 2: Git commit must exist before deploy
-      if [ -d "$R4G_DIR/.git" ]; then
-        UNCOMMITTED=$(git -C "$R4G_DIR" status --porcelain 2>/dev/null | head -1)
-        if [ -n "$UNCOMMITTED" ]; then
-          echo "🚫 R4G WORKFLOW VIOLATION: Uncommitted changes in R4G!" >&2
-          echo "   Gale must commit before deploy. Run: git -C $R4G_DIR status" >&2
-          exit 6
-        fi
+    done
+  fi
+  if [ -z "$MATCHED_CONF" ]; then
+    for conf in "$ENFORCE_DIR"/*.conf; do
+      [ -e "$conf" ] || continue
+      load_conf "$conf"
+      if [ -n "$DETECT_REGEX" ] && echo "$PROMPT" | grep -qiE "$DETECT_REGEX"; then
+        MATCHED_CONF="$conf"; break
       fi
+    done
+  fi
+fi
 
-      # RULE 3: Auto-push to GitHub before deploy
-      if [ -d "$R4G_DIR/.git" ]; then
-        REMOTE_CHECK=$(git -C "$R4G_DIR" remote get-url origin 2>/dev/null || echo "")
-        if [ -n "$REMOTE_CHECK" ]; then
-          git -C "$R4G_DIR" push origin master --quiet 2>/dev/null && \
-            echo "✅ R4G: auto-pushed to GitHub (business-for-fun/r4g)" >&2 || \
-            echo "⚠️  R4G: git push failed, continue with deploy" >&2
-        fi
-      fi
-      ;;
+if [ -z "$MATCHED_CONF" ]; then
+  # чистим leftover-переменные последнего load_conf из циклов детекта
+  PROJECT=""; MODE=""
+fi
 
-    kim)
-      # RULE 4: Cannot verify without deploy first
-      LAST_DEPLOY=$(sqlite3 "$DB_PATH" "
-        SELECT status, completed_at FROM inter_agent_tasks
-        WHERE to_agent IN ('freddie', 'olaf')
-        AND status = 'completed'
-        AND prompt LIKE '%deploy%'
-        ORDER BY completed_at DESC LIMIT 1;
-      " 2>/dev/null)
-      if [ -z "$LAST_DEPLOY" ]; then
-        echo "🚫 R4G WORKFLOW VIOLATION: Cannot verify without deploy!" >&2
-        echo "   Workflow: Gale (fix+commit) → Freddie (deploy) → Kim (verify)" >&2
-        exit 6
+if [ -n "$MATCHED_CONF" ] && [ -f "$DB_PATH" ]; then
+  load_conf "$MATCHED_CONF"
+  PROJECT_UPPER="$(echo "$PROJECT" | tr '[:lower:]' '[:upper:]')"
+  PAUSE_FILE="$STORE_DIR/PAUSE_${PROJECT_UPPER}"
+  TAG="ENFORCEMENT[$PROJECT]"
+
+  violation() { # $1 = message, $2 = hint
+    echo "🚫 $TAG: $1" >&2
+    [ -n "${2:-}" ] && echo "   $2" >&2
+    if [ "$MODE" = "enforce" ]; then
+      exit 6
+    else
+      echo "   [WARN-MODE ($PROJECT): делегация пропущена, в enforce был бы блок]" >&2
+    fi
+  }
+
+  # ── GATE 0: PROJECT PAUSE — always enforced ──
+  if [ -f "$PAUSE_FILE" ]; then
+    if [ -n "$CARD_ID" ] && grep -q "^allow: $CARD_ID" "$PAUSE_FILE"; then
+      echo "ℹ️  PAUSE active for $PROJECT, but $CARD_ID is explicitly allowed:" >&2
+      grep "^allow: $CARD_ID" "$PAUSE_FILE" >&2
+    else
+      echo "🛑 PAUSE ACTIVE [$PROJECT] — делегация заблокирована." >&2
+      sed 's/^/   /' "$PAUSE_FILE" >&2
+      echo "Пауза снимается ТОЛЬКО Alex (удаление файла $PAUSE_FILE)." >&2
+      echo "Никакие события, уведомления и пинки её не отменяют. Разрешено: отвечать в чат." >&2
+      exit 6
+    fi
+  fi
+
+  # ── GATE 1: card required (Rule 1) ──
+  if [ -z "$CARD_ID" ]; then
+    violation "Задача проекта $PROJECT без ID карточки в промпте." \
+      "Каждая делегация обязана содержать BUG-/TASK-/FEAT-ID. Нет карточки → сначала открой её в $CARDS_DIR/ (Rule 1)."
+  elif [ -z "$CARD_FILE" ]; then
+    violation "Карточка $CARD_ID не найдена ни в одном проекте (искали по всем CARDS_DIR)." \
+      "Открой карточку в $CARDS_DIR/ до делегации (Rule 1)."
+  else
+    # ── GATE 2: card is open ──
+    CARD_STATUS="$(grep -m1 -oP '^\*\*Status:\*\*\s*\K\S+' "$CARD_FILE" 2>/dev/null || true)"
+    case "$CARD_STATUS" in
+      closed|rejected)
+        violation "Карточка $CARD_ID имеет статус '$CARD_STATUS' — работа по ней закрыта." \
+          "Новая проблема → новая карточка."
+        ;;
+    esac
+
+    # ── GATE 3: duplicate step for this card (exact, not similarity) ──
+    DUP_TASK=$(sqlite3 "$DB_PATH" "
+      SELECT id || ' → ' || to_agent || ' (' || status || ', ' || created_at || ')'
+      FROM inter_agent_tasks
+      WHERE status IN ('pending','accepted','in_progress')
+        AND prompt LIKE '%$CARD_ID%'
+      LIMIT 1;" 2>/dev/null || true)
+    if [ -n "$DUP_TASK" ]; then
+      violation "По карточке $CARD_ID уже есть активная задача: $DUP_TASK" \
+        "Шаг уже в полёте — дождись завершения, не дублируй (инцидент «двойной smoke» 30.07)."
+    fi
+
+    # ── GATE 4: step order per project pipeline ──
+    completed_for_card() { # $1 = sql agent list "'a','b'"
+      sqlite3 "$DB_PATH" "
+        SELECT count(*) FROM inter_agent_tasks
+        WHERE to_agent IN ($1) AND status='completed'
+          AND prompt LIKE '%$CARD_ID%';" 2>/dev/null || echo 0
+    }
+
+    if [ -n "$DEPLOY_REGEX" ] && echo "$PROMPT" | grep -qiE "$DEPLOY_REGEX"; then
+      # Необратимое действие (деплой/релиз/покупка) → approval в карточке (Rule 6)
+      if ! grep -qiE 'approved_by:\s*[^ <]|approved to deploy|approve[d]? .*(alex|valera|валер|fedor|фёдор|batch)' "$CARD_FILE"; then
+        violation "Необратимое действие по $CARD_ID без зафиксированного approval в карточке (Rule 6)." \
+          "Впиши в карточку approved_by: <кто> (или цитату approve) — потом делегируй."
       fi
-      ;;
-  esac
+    elif [ -n "$SYNC_REGEX" ] && echo "$PROMPT" | grep -qiE "$SYNC_REGEX"; then
+      # Синк/доставка кода → шаг владельца кода по карточке должен быть завершён
+      if [ -n "$CODE_OWNERS" ] && [ "$(completed_for_card "$CODE_OWNERS")" -eq 0 ]; then
+        violation "Синк по $CARD_ID раньше завершённого фикса владельца кода." \
+          "Порядок: fix ($CODE_OWNERS) → sync. Откаты оформляй отдельной карточкой."
+      fi
+    fi
+
+    if [ -n "$VERIFY_AGENTS" ] && echo " $VERIFY_AGENTS " | grep -q " $AGENT_ID " \
+       && echo "$PROMPT" | grep -qiE "verif|верифик|провер|smoke"; then
+      if [ -n "$EXECUTORS" ] && [ "$(completed_for_card "$EXECUTORS")" -eq 0 ]; then
+        violation "Верификация по $CARD_ID раньше какого-либо завершённого шага исполнителя." \
+          "Порядок: fix → (sync/deploy) → verify."
+      fi
+    fi
+  fi
+
+  # ── GATE 5: uncommitted CODE перед деплоем/синком (доки .md не блокируют) ──
+  if [ -n "$PROJECT_DIR" ] && [ -d "$SCRIPT_DIR/../$PROJECT_DIR/.git" ] \
+     && echo "$PROMPT" | grep -qiE "${DEPLOY_REGEX:-__none__}|${SYNC_REGEX:-__none__}"; then
+    UNCOMMITTED_CODE=$(git -C "$SCRIPT_DIR/../$PROJECT_DIR" status --porcelain 2>/dev/null \
+      | grep -vE '(\.md$|^\?\? )' | grep -E '\.(js|jsx|ts|json|sh|css)$' | head -3 || true)
+    if [ -n "$UNCOMMITTED_CODE" ]; then
+      violation "Незакоммиченный КОД в $PROJECT перед синком/деплоем:" \
+        "$UNCOMMITTED_CODE"
+    fi
+  fi
+  # (Апрельский auto-push удалён: push — часть деплой-скрипта, не побочный эффект.)
+fi
+
+# ── Dry-run: прогнать гарды без реальной делегации (для тестов) ──
+if [ "${DELEGATE_DRY_RUN:-}" = "1" ]; then
+  echo "DRY-RUN OK: guards passed (project=${PROJECT:-none}, mode=${MODE:-n/a}), would delegate to '$AGENT_ID'" >&2
+  exit 0
 fi
 
 # ── Resolve agent-specific dashboard port ──

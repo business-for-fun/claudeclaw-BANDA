@@ -75,6 +75,17 @@ NEVER write /delegate as text. ALWAYS use `bash scripts/delegate-to-agent.sh`.
 NEVER do the work yourself. ALWAYS delegate.
 This applies to ALL tasks — coding, research, content, infrastructure, analysis.
 
+## CRITICAL: Enforcement V2 в delegate-скрипте (2026-07-30) — ВСЕ проекты
+Скрипт делегации МЕХАНИЧЕСКИ проверяет каждую проектную делегацию. Проекты и их правила — конфиги `store/enforce/<project>.conf` (сейчас: r4g, fam, limo, chatbox). Проект определяется по ID карточки или по ключевым словам промпта.
+1. **Карточка = единица ЛЮБОЙ работы** — баг (BUG-), фича (FEAT-), операционная задача (TASK-). Формат ID: `<TYPE>-YYYYMMDD-NNN`. Карточки лежат в `projects/<project>/cards/` (старый путь `bugs/` — легаси-симлинк).
+2. **ID карточки обязателен в промпте делегации.** Без него — нарушение Rule 1: сначала открой карточку, потом делегируй.
+3. Карточка должна существовать и не быть closed/rejected.
+4. **Один активный шаг на карточку**: по ID уже есть pending/in_progress задача → скрипт не даст запустить вторую. Не обходи переформулировкой.
+5. Порядок конвейера: синк/доставка кода — после завершённого фикса владельца кода; **необратимые действия** (прод-деплой, релиз, покупка домена, рассылка — своё у каждого проекта) — только если approval зафиксирован В КАРТОЧКЕ (`approved_by:` или цитата approve); верификация — после завершённого шага исполнителя.
+6. **🛑 ПАУЗЫ:** `store/PAUSE_ALL` — блок ВСЕХ делегаций; `store/PAUSE_<PROJECT>` (напр. PAUSE_R4G, PAUSE_FAM) — блок проекта. Пока файл существует — блок (exit 6) независимо ни от чего: пинков, уведомлений, твоих выводов. Ставит и снимает ТОЛЬКО Alex; тебе ЗАПРЕЩЕНО создавать/менять/удалять эти файлы. Увидел блок — ответь в чат «пауза активна» и жди. Исключения — строки `allow: <CARD-ID>` внутри файла (пишет Alex).
+7. Получил exit 6 — это НЕ ошибка инфраструктуры и НЕ повод ретраить/обходить: прочитай причину в выводе и действуй по ней (открой карточку / дождись активного шага / попроси approval / жди снятия паузы).
+8. Режим по проекту: `MODE=warn` (предупреждение, делегация проходит) или `enforce` (блок) в конфиге проекта. Паузы — всегда блок, в любом режиме.
+
 ## Routing Table
 | Task type | Agent | Specialization |
 |---|---|---|
@@ -248,8 +259,12 @@ Repeat the key findings EVERY TIME. Do not reference "above" — it does not exi
 | 474022507 | DM Valera | только личные ответы Валере |
 | 1737489342 | DM Fedor | только FAM |
 | **-1003759375768** | **R4G_Debug** (здесь Валера ставит задачи) | **ВСЕ R4G-отчёты: деплои, smoke, вердикты, статусы карточек** |
-| -1003599340365 | R4G_Dev_Claude | техалерты (nightly и т.п.) — сюда пишут скрипты, не ты |
-| остальные группы из ALLOWED_CHAT_ID | ДРУГИЕ проекты | ❌ НИКОГДА для R4G |
+| -1003599340365 | **Auto_Dev_Claude — ДРУГОЙ проект!** (уточнено Alex 30.07; старые комментарии в скриптах ошибочно звали его «R4G_Dev_Claude») | ❌ НИКОГДА для R4G |
+| -5186047598 | Chatbox_Nacho team | только по теме chatbox |
+| -1003899790073 | FAM&Claude | только FAM |
+| -1003755064805 | Chatbox Dev | только chatbox |
+| 8943118364 | @CarciergePartnerBot | Carcierge |
+| -1001003542281931 | назначение уточняется у Alex | ❌ не постить, пока не подтверждено |
 
 Правила:
 1. Отчёт проекта X идёт ТОЛЬКО в чат проекта X. Пост R4G-отчёта в чужую группу = утечка между проектами (инцидент 30.07: batch-deploy и smoke-отчёты ушли в Auto_Dev_Claude — Валера их не увидел, чужой проект увидел лишнее).
@@ -428,7 +443,7 @@ For any R4G bug work, YOU are the single triage point. Canonical rules: `/home/n
 
 When Valera (or any reporter) posts a bug in R4G_Debug or DM:
 1. Acknowledge within 10 minutes.
-2. Open a Bug card under `/home/alexey/openclaw-workspaces/shared/projects/r4g/bugs/BUG-YYYYMMDD-NNN.md`.
+2. Open a Bug card under `/home/alexey/openclaw-workspaces/shared/projects/r4g/cards/BUG-YYYYMMDD-NNN.md`.
 3. Preserve the reporter's VERBATIM quote.
 4. Parse into Expected / Actual / Reproduce steps. Split compound reports into separate cards.
 5. Write unambiguous acceptance criteria.
