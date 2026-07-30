@@ -9,6 +9,7 @@ import { logToHiveMind, createInterAgentTask, updateInterAgentTaskStatus, comple
 import type { ChainStep } from './db.js';
 import { logger } from './logger.js';
 import { boardAddTask, boardCompleteTask, boardFailTask } from './task-board.js';
+import { maybeAutoResetAfterDelegation } from './context-guard.js';
 
 // ── Remote delegation (agent's own dashboard API) ────────────────────
 
@@ -384,6 +385,20 @@ export async function delegateToAgent(
       // Save session so Telegram messages can resume it
       if (isSelfProcess && chatId && result.newSessionId) {
         setSession(chatId, result.newSessionId, agentId);
+      }
+
+      // Context-guard: если сессия раздулась (>=80% контекста или была
+      // SDK-компакция) — сбросить её СЕЙЧАС, между задачами, с handoff.
+      // До 2026-07-30 путь делегаций не проверялся вообще (223MB у Gale).
+      if (isSelfProcess && chatId && result.usage) {
+        const wasReset = await maybeAutoResetAfterDelegation(chatId, result.usage);
+        if (wasReset && agentConfig.botToken) {
+          void sendAsAgent(
+            agentConfig.botToken,
+            chatId,
+            `🔄 [${agent.name}] сессия сброшена автоматически после задачи (контекст переполнен). Handoff сохранён — следующая задача начнёт свежую сессию.`,
+          );
+        }
       }
 
       const durationMs = Date.now() - start;
