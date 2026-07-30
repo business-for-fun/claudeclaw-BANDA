@@ -123,7 +123,8 @@ case "$AGENT_ID" in
 esac
 
 # ── Duplicate delegation guard ──
-# Check if this agent already has an active task in the last 10 minutes.
+# Check if this agent already has an active task in the last 30 minutes.
+# (widened from 10 on 2026-07-30: a duplicate smoke delegation slipped through a 10:04 gap)
 # Warns the coordinator to avoid wasting tokens on duplicate/rephrased delegations.
 DB_PATH="$SCRIPT_DIR/../store/claudeclaw.db"
 if [ -f "$DB_PATH" ]; then
@@ -132,7 +133,7 @@ if [ -f "$DB_PATH" ]; then
     FROM inter_agent_tasks
     WHERE to_agent = '$AGENT_ID'
       AND status IN ('pending', 'accepted', 'in_progress')
-      AND created_at >= datetime('now', '-10 minutes')
+      AND created_at >= datetime('now', '-30 minutes')
     ORDER BY created_at DESC
     LIMIT 1;
   " 2>/dev/null)

@@ -53,7 +53,8 @@ done <<< "$ROWS"
 
 MSG="⏰ Follow-up (авто, nacho-followup.sh): завершились делегации:
 $LIST
-Для каждой: возьми result из inter_agent_tasks (sqlite3 store/claudeclaw.db), отчитайся В ТОМ ЧАТЕ, где ставилась задача (для R4G — группа, через curl sendMessage), и продолжи конвейер карточки (следующий шаг workflow). Если по какой-то уже отчитался — подтверди одной строкой, отчёт не повторяй."
+Для каждой: возьми result из inter_agent_tasks (sqlite3 store/claudeclaw.db), отчитайся В ТОМ ЧАТЕ, где ставилась задача (для R4G — группа, через curl sendMessage), и продолжи конвейер карточки.
+⚠️ ПЕРЕД продолжением конвейера ОБЯЗАТЕЛЬНО проверь, не запущен ли следующий шаг уже: sqlite3 store/claudeclaw.db \"SELECT id,to_agent,substr(prompt,1,50) FROM inter_agent_tasks WHERE status='in_progress';\" — если следующий шаг там, НЕ делегируй его повторно (инцидент 30.07: двойной smoke). Если по какой-то задаче уже отчитался — подтверди одной строкой, отчёт не повторяй."
 
 HTTP=$(curl -s -o /dev/null -w '%{http_code}' -m 15 \
   -X POST "http://127.0.0.1:3141/api/chat/send?token=$TOKEN" \
