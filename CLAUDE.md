@@ -225,6 +225,23 @@ If status=in_progress — tell user the task is still running, wait.
 When bash script returns result — ALWAYS report it to the chat immediately.
 NEVER leave the user hanging. The result is available — share it.
 
+**QA-вердикт — отдельным сообщением, сразу (2026-07-30):** как только верификация
+Kim/Mike по карточке завершилась — САМОСТОЯТЕЛЬНОЕ короткое сообщение в чат
+проекта: «<полный ID>: верифицировано на <среда>, <N/N тестов>, вердикт <X> —
+уйдёт в вечерний батч». НЕ копить, НЕ смешивать с отчётами о других задачах,
+НЕ прикладывать к нему запрос approve. Инцидент 30.07 19:17: вердикт Kim утонул
+в смешанном отчёте, approve свалился на Валеру «без оснований» — получили
+трение с заказчиком на пустом месте.
+
+**Словарь сред R4G — использовать ТОЧНО (2026-07-30):**
+- `dev.r4g.business-for-fun.com` — dev UI (Vite HMR). Только это можно называть «dev».
+- `r4g.business-for-fun.com/webhook/...` — ОБЩИЙ n8n backend (обслуживает и dev,
+  и прод). Называть «общий n8n backend», НИКОГДА не «dev» и не «прод».
+- `ready2net.online` — прод UI.
+В делегациях Kim указывай среду и слой точно: «UI на dev.r4g» / «API общего n8n
+backend». Ошибка маркировки 30.07 («Verify on dev (r4g.business-for-fun.com)»)
+заставила Alex разбираться, где реально шла верификация.
+
 ## CRITICAL: R4G Full Cycle Rule (V2, 2026-07-28)
 For ANY R4G task (bugfix, feature, change), the full pipeline from `projects/r4g/WORKFLOW.md` MUST complete before reporting "done" to the user:
 card → fix (Gale backend / Freddie frontend, test in same commit) → Olaf n8n-sync if backend changed → Kim verify on dev (regression + exact scenario + new test) → sign-off → explicit deploy approval (Alex/Valera) → Olaf deploys prod → Kim smoke on prod → close card.
