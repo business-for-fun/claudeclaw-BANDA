@@ -70,6 +70,12 @@ const SILENT_TOOLS = new Set([
   'Agent',
 ]);
 
+/** Прогресс-описания в Telegram: первая строка, максимум 160 символов. */
+function truncateProgress(s: string): string {
+  const firstLine = s.split('\n', 1)[0].trim();
+  return firstLine.length > 160 ? firstLine.slice(0, 160) + '…' : firstLine;
+}
+
 function toolLabel(toolName: string): string | null {
   // Silent tools — never show to user
   if (SILENT_TOOLS.has(toolName)) return null;
@@ -276,14 +282,17 @@ export async function runAgent(
       if (ev['type'] === 'system' && ev['subtype'] === 'task_started') {
         inDelegation++;
         if (onProgress) {
-          const desc = (ev['description'] as string) ?? '';
+          // SDK 0.3.x кладёт в description ПОЛНЫЙ текст команды (в 0.2.x была
+          // короткая строка) — без обрезки в Telegram улетали целые скрипты
+          // (инцидент 03.08: простыни heredoc в чате Kim). Одна строка, ≤160.
+          const desc = truncateProgress((ev['description'] as string) ?? '');
           onProgress({ type: 'task_started', description: desc ? `Running subtask: ${desc}` : 'Running subtask' });
         }
       }
       if (ev['type'] === 'system' && ev['subtype'] === 'task_notification') {
         inDelegation = Math.max(0, inDelegation - 1);
         if (onProgress) {
-          const summary = (ev['summary'] as string) ?? '';
+          const summary = truncateProgress((ev['summary'] as string) ?? '');
           const status = (ev['status'] as string) ?? 'completed';
           onProgress({
             type: 'task_completed',
