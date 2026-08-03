@@ -412,6 +412,7 @@ export async function delegateToAgent(
         status: 'completed',
         resultHead: result.text,
         prompt,
+        chatId,
       });
       logToHiveMind(
         agentId,
@@ -460,6 +461,7 @@ export async function delegateToAgent(
       status: 'failed',
       resultHead: errMsg,
       prompt,
+      chatId,
     });
     logToHiveMind(
       agentId,

@@ -460,12 +460,25 @@ export function startDashboard(botApi?: Api<RawApi>, portOverride?: number): voi
   // Send message from dashboard
   app.post('/api/chat/send', async (c) => {
     if (!botApi) return c.json({ error: 'Bot API not available' }, 503);
-    const body = await c.req.json<{ message?: string }>();
+    const body = await c.req.json<{ message?: string; chat_id?: string }>();
     const message = body?.message?.trim();
     if (!message) return c.json({ error: 'message required' }, 400);
 
+    // Опциональная адресация чата/сессии (будильник Начо, 2026-08-03):
+    // уведомление о завершении делегации должно входить В СЕССИЮ ТОГО ЧАТА,
+    // где ставилась задача, а не в дефолтную (DM). Только чаты из allowlist.
+    let targetChatId: string | undefined;
+    const requested = body?.chat_id?.trim();
+    if (requested) {
+      const allowed = (ALLOWED_CHAT_ID ?? '').split(',').map((s) => s.trim());
+      if (!allowed.includes(requested)) {
+        return c.json({ error: `chat_id not in allowlist` }, 403);
+      }
+      targetChatId = requested;
+    }
+
     // Fire-and-forget: response comes via SSE
-    void processMessageFromDashboard(botApi, message);
+    void processMessageFromDashboard(botApi, message, targetChatId);
     return c.json({ ok: true });
   });
 

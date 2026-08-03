@@ -1477,10 +1477,14 @@ messageQueue.enqueue(chatIdStr, () => handleMessage(ctx, enrichedText));
 export async function processMessageFromDashboard(
   botApi: Api<RawApi>,
   text: string,
+  /** Целевой чат (уже провалидирован по allowlist в dashboard.ts).
+   *  Задаёт СЕССИЮ, в которой обрабатывается сообщение — будильник Начо
+   *  адресует уведомления в сессию чата, где ставилась задача. */
+  targetChatId?: string,
 ): Promise<void> {
   if (!ALLOWED_CHAT_ID) return;
 
-  const chatIdStr = ALLOWED_CHAT_ID.split(',')[0];
+  const chatIdStr = targetChatId ?? ALLOWED_CHAT_ID.split(',')[0];
 
   logger.info({ messageLen: text.length, source: 'dashboard' }, 'Processing dashboard message');
 

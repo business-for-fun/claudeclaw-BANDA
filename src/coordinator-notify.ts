@@ -32,6 +32,9 @@ export interface CompletionInfo {
   resultHead: string | null;
   /** Промпт задачи — из него достаём ID карточки для контекста. */
   prompt: string;
+  /** Чат, из которого ставилась задача, — уведомление войдёт в ЕГО сессию
+   *  у координатора (защита от split-brain между per-chat сессиями). */
+  chatId?: string;
 }
 
 /**
@@ -67,9 +70,19 @@ export async function notifyCoordinator(info: CompletionInfo): Promise<void> {
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({
+          message,
+          // Адресуем сессию чата постановки задачи. Если чат не в allowlist
+          // координатора (403) — фолбэк без chat_id (дефолтная сессия + резервное правило).
+          ...(info.chatId ? { chat_id: info.chatId } : {}),
+        }),
         signal: AbortSignal.timeout(10_000),
       });
+      if (res.status === 403 && info.chatId) {
+        // Чат не разрешён у main — повторим в дефолтную сессию.
+        info = { ...info, chatId: undefined };
+        continue;
+      }
       if (res.ok) {
         logger.info({ taskId: info.taskId, status: info.status }, 'coordinator-notify: Начо уведомлён');
         return;
