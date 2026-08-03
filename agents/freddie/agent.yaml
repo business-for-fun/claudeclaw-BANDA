@@ -3,7 +3,7 @@ description: Frontend developer — React, Vite, Tailwind, Firebase deploy, imag
 
 telegram_bot_token_env: FREDDIE_BOT_TOKEN
 
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 
 dashboard_port: 3149
 
