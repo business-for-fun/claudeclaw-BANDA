@@ -226,9 +226,9 @@ fi
 # ── Определение проекта ──
 MATCHED_CONF=""
 CARD_FILE=""
-load_conf() { # sets PROJECT, PROJECT_DIR, CARDS_DIR, regexes, owners, MODE
+load_conf() { # sets PROJECT, PROJECT_DIR, CARDS_DIR, regexes, owners, MODE, PROJECT_CHAT_ID
   PROJECT=""; PROJECT_DIR=""; CARDS_DIR=""; DETECT_REGEX=""; DEPLOY_REGEX=""
-  SYNC_REGEX=""; CODE_OWNERS=""; EXECUTORS=""; VERIFY_AGENTS=""; MODE="warn"
+  SYNC_REGEX=""; CODE_OWNERS=""; EXECUTORS=""; VERIFY_AGENTS=""; MODE="warn"; PROJECT_CHAT_ID=""
   # shellcheck disable=SC1090
   . "$1"
 }
@@ -255,7 +255,7 @@ fi
 
 if [ -z "$MATCHED_CONF" ]; then
   # чистим leftover-переменные последнего load_conf из циклов детекта
-  PROJECT=""; MODE=""
+  PROJECT=""; MODE=""; PROJECT_CHAT_ID=""
 fi
 
 if [ -n "$MATCHED_CONF" ] && [ -f "$DB_PATH" ]; then
@@ -363,7 +363,7 @@ fi
 
 # ── Dry-run: прогнать гарды без реальной делегации (для тестов) ──
 if [ "${DELEGATE_DRY_RUN:-}" = "1" ]; then
-  echo "DRY-RUN OK: guards passed (project=${PROJECT:-none}, mode=${MODE:-n/a}), would delegate to '$AGENT_ID'" >&2
+  echo "DRY-RUN OK: guards passed (project=${PROJECT:-none}, mode=${MODE:-n/a}, chat=${PROJECT_CHAT_ID:-default}), would delegate to '$AGENT_ID'" >&2
   exit 0
 fi
 
@@ -388,7 +388,13 @@ AGENT_URL="http://localhost:${AGENT_PORT}"
 ESCAPED_PROMPT=$(python3 -c "import json,sys; print(json.dumps(sys.stdin.read().strip()))" <<< "$PROMPT")
 
 # Build request body
-BODY="{\"agentId\":\"${AGENT_ID}\",\"prompt\":${ESCAPED_PROMPT},\"timeoutMs\":${TIMEOUT_MS}}"
+# Привязка задачи к чату проекта (будильник будит Начо в сессии этого чата).
+# Без проекта — chatId не шлём, сработает дефолт (DM Alex).
+if [ -n "$PROJECT_CHAT_ID" ]; then
+  BODY="{\"agentId\":\"${AGENT_ID}\",\"prompt\":${ESCAPED_PROMPT},\"timeoutMs\":${TIMEOUT_MS},\"chatId\":\"${PROJECT_CHAT_ID}\"}"
+else
+  BODY="{\"agentId\":\"${AGENT_ID}\",\"prompt\":${ESCAPED_PROMPT},\"timeoutMs\":${TIMEOUT_MS}}"
+fi
 
 # Try agent's own dashboard first (3s connect timeout), fallback to main
 RESPONSE=$(curl -s --connect-timeout 3 -X POST \
