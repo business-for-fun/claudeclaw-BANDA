@@ -60,6 +60,14 @@ const SILENT_TOOLS = new Set([
   'TaskOutput',
   'TaskStop',
   'EnterWorktree',
+  // SDK 0.3.142+: headless-сессии используют Task-тулзы вместо TodoWrite —
+  // такой же внутренний шум, глушим. 'Agent' — будущее имя субагентного тула
+  // (анонсированная миграция с 'Task'), добавлен заранее.
+  'TaskCreate',
+  'TaskUpdate',
+  'TaskGet',
+  'TaskList',
+  'Agent',
 ]);
 
 function toolLabel(toolName: string): string | null {
