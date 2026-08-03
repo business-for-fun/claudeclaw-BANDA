@@ -10,6 +10,7 @@ import type { ChainStep } from './db.js';
 import { logger } from './logger.js';
 import { boardAddTask, boardCompleteTask, boardFailTask } from './task-board.js';
 import { maybeAutoResetAfterDelegation } from './context-guard.js';
+import { notifyCoordinator } from './coordinator-notify.js';
 
 // ── Remote delegation (agent's own dashboard API) ────────────────────
 
@@ -403,6 +404,15 @@ export async function delegateToAgent(
 
       const durationMs = Date.now() - start;
       completeInterAgentTask(taskId, 'completed', result.text);
+      // Будильник Начо: событийное уведомление координатора о завершении.
+      // Fire-and-forget — не блокирует возврат результата.
+      void notifyCoordinator({
+        agentName: agent.name,
+        taskId,
+        status: 'completed',
+        resultHead: result.text,
+        prompt,
+      });
       logToHiveMind(
         agentId,
         chatId,
@@ -443,6 +453,14 @@ export async function delegateToAgent(
     const durationMs = Date.now() - start;
     const errMsg = err instanceof Error ? err.message : String(err);
     completeInterAgentTask(taskId, 'failed', errMsg);
+    // Будильник Начо: сбой — тоже событие, о котором координатор должен узнать сам.
+    void notifyCoordinator({
+      agentName: agent.name,
+      taskId,
+      status: 'failed',
+      resultHead: errMsg,
+      prompt,
+    });
     logToHiveMind(
       agentId,
       chatId,
