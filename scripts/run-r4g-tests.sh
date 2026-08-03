@@ -93,8 +93,8 @@ fi
 # ── Send Telegram notification ──────────────────────────────────
 send_telegram() {
   local message="$1"
-  # Alex DM + R4G_Dev_Claude group — both via ClaudeClaw bot
-  for cid in 6655962301 -1003599340365; do
+  # Alex DM + R4G_Debug group (НЕ Auto_Dev_Claude! чужой проект — инцидент 30.07)
+  for cid in 6655962301 -1003759375768; do
     curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
       -d "chat_id=${cid}" \
       -d "text=${message}" \
