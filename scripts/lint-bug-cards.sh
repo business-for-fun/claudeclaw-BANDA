@@ -29,7 +29,7 @@ for f in "$BUGS_DIR"/BUG-*.md "$BUGS_DIR"/TASK-*.md; do
   if [ "$card_date" -lt "$V2_CUTOFF" ]; then
     LEGACY=$((LEGACY+1)); continue
   fi
-  status="$(grep -m1 -oP '^\*\*Status:\*\*\s*\K\S+' "$f" 2>/dev/null || true)"
+  status="$(grep -m1 -ioP '^\*\*Status:\*\*\s*\K\S+' "$f" 2>/dev/null || true)"
 
   if [ -z "$status" ]; then
     OUT+="❓ $base: нет строки **Status:**"$'\n'; WARN=1; continue
