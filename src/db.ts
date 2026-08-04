@@ -1611,7 +1611,7 @@ export function completeInterAgentTask(
 ): void {
   db.prepare(
     `UPDATE inter_agent_tasks SET status = ?, result = ?, completed_at = datetime('now') WHERE id = ?`,
-  ).run(status, result?.slice(0, 2000) ?? null, id);
+  ).run(status, result?.slice(0, 16000) ?? null, id);
   syncTeamBoard();
 }
 
@@ -1736,7 +1736,7 @@ export function updateChainRun(
 ): void {
   db.prepare(
     `UPDATE scheduled_chains SET last_run_at = datetime('now'), last_status = ?, last_result = ? WHERE id = ?`,
-  ).run(status, result?.slice(0, 2000) ?? null, id);
+  ).run(status, result?.slice(0, 16000) ?? null, id);
 }
 
 export function deleteScheduledChain(id: string): void {
