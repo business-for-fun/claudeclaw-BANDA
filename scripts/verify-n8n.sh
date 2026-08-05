@@ -49,6 +49,21 @@ MAP=(
   "keQOweGX4eAkLyUc|Code: ML Start|$R4G_DIR/ml_start_fix.js"
   "keQOweGX4eAkLyUc|Code: ML Stop|$R4G_DIR/ml_stop_fix.js"
   "R5LHPUynalETS74X|Compute Plans|$R4G_DIR/netting_compute_plans_v2.js"
+  "R5LHPUynalETS74X|Netting Engine Router|$R4G_DIR/netting_engine_router.js"
+  "R5LHPUynalETS74X|Parse Webhook Input|$R4G_DIR/netting_parse_webhook_input.js"
+  "R5LHPUynalETS74X|Return Summary|$R4G_DIR/netting_return_summary.js"
+
+  # ── TASK-20260805-002: 12 repo files found matching live nodes but
+  # missing from this MAP (Gale full scan, FEAT-20260805-003 step 0) ──
+  "pXoEwtpYF3q5MklB|Compute Internal Netting|$R4G_DIR/internal_netting_v1.js"
+  "pXoEwtpYF3q5MklB|Parse Webhook Input|$R4G_DIR/inet_parse_webhook_input.js"
+  "pXoEwtpYF3q5MklB|Inject iNet Credits|$R4G_DIR/inet_inject_credits.js"
+  "pXoEwtpYF3q5MklB|Parse Stats Query|$R4G_DIR/parse_stats_query.js"
+  "NAPvI3oGvRxRabkt|Read iNet Credits|$R4G_DIR/inet_credits_v1.js"
+  "5AYqEk27XKzbmhg8|Broker Auth|$R4G_DIR/broker_auth.js"
+  "5AYqEk27XKzbmhg8|Set Broker Password|$R4G_DIR/broker_password_set.js"
+  "5AYqEk27XKzbmhg8|Get Broker Passwords|$R4G_DIR/broker_passwords_get.js"
+  "Kt71Tsx9cPLTns57|Compute Admin Financials|$R4G_DIR/admin_financials_v1.js"
 
   # ── Client storage (FEAT-20260805-003 step 0) ──
   # Every Code node of the three storage workflows is mirrored, so a change to
@@ -70,6 +85,29 @@ MAP=(
   "wcvKhSOUyaKzPsAM|Get Config|$R4G_DIR/share_config_get.js"
   "8ESm4382Ixh2J2cN|Store Broker Config|$R4G_DIR/broker_config_store.js"
   "8ESm4382Ixh2J2cN|Return Broker Config|$R4G_DIR/broker_config_return.js"
+
+  # ── TASK-20260805-002: independent full scan, 18 more live nodes with
+  # zero repo file (not "not in map" — file didn't exist). Two are real
+  # prod endpoints called by frontend/src/config.js (BROKER_CREDIT_*,
+  # HUB_PRICES_*) that had NO repo representation at all before this. ──
+  "T4JFR1lF7iis0zTt|Compute Plans|$R4G_DIR/set1_solutions_compute_plans.js"
+  "T4JFR1lF7iis0zTt|Results Items|$R4G_DIR/set1_solutions_results_items.js"
+  "T4JFR1lF7iis0zTt|Details Items|$R4G_DIR/set1_solutions_details_items.js"
+  "T4JFR1lF7iis0zTt|Return Summary|$R4G_DIR/set1_solutions_return_summary.js"
+  "a0Mmvs3Iz7quHhia|Validate+Build Cycles|$R4G_DIR/set1_loops_validate_build_cycles.js"
+  "a0Mmvs3Iz7quHhia|Results Items|$R4G_DIR/set1_loops_results_items.js"
+  "a0Mmvs3Iz7quHhia|Loop_Details Items|$R4G_DIR/set1_loops_details_items.js"
+  "a0Mmvs3Iz7quHhia|Return Summary|$R4G_DIR/set1_loops_return_summary.js"
+  "AibeoQC5WwY5mmN7|Store Broker Credits|$R4G_DIR/broker_credit_store.js"
+  "AibeoQC5WwY5mmN7|Get All Credits|$R4G_DIR/broker_credits_get_all.js"
+  "AibeoQC5WwY5mmN7|Admin Save Credits|$R4G_DIR/broker_credit_admin_save.js"
+  "jB6MiQjZHihD60pf|Parse CSV and Extract Prices|$R4G_DIR/hub_prices_parse_csv.js"
+  "jB6MiQjZHihD60pf|Return Stored Prices|$R4G_DIR/hub_prices_get.js"
+  "jB6MiQjZHihD60pf|Parse CSV and Extract Prices (Manual)|$R4G_DIR/hub_prices_parse_csv_manual.js"
+  "pXoEwtpYF3q5MklB|Parse History Query|$R4G_DIR/inet_parse_history_query.js"
+  "Kt71Tsx9cPLTns57|Fetch iNet Data|$R4G_DIR/admin_financials_fetch_inet_data.js"
+  "NAPvI3oGvRxRabkt|Parse POST iNet Credits|$R4G_DIR/inet_credits_parse_post.js"
+  "NAPvI3oGvRxRabkt|Parse GET iNet Credits|$R4G_DIR/inet_credits_parse_get.js"
 )
 
 TMP="$(mktemp -d)"
