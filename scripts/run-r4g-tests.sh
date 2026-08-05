@@ -90,6 +90,25 @@ if [ "$CARDS_EXIT" -ne 0 ]; then
 ${CARDS_OUTPUT}"
 fi
 
+# ── e2e guard-fixture regression check (TASK-20260805-001) ──────
+# Protects FEAT-20260805-001's shared Playwright isolation guard from
+# rotting: a new *.spec.js that drives a browser with zero write
+# interception (or switches to @playwright/test, bypassing the fixture
+# entirely) is exactly the BUG-20260804-018 class of risk recurring.
+GUARD_EXIT=0
+GUARD_OUTPUT="$(bash "$SCRIPT_DIR/lint-e2e-guard-imports.sh" 2>&1)" || GUARD_EXIT=$?
+{
+  echo ""
+  echo "── e2e guard-fixture check (lint-e2e-guard-imports.sh, exit $GUARD_EXIT) ──"
+  echo "$GUARD_OUTPUT"
+} >> "$RESULT_FILE"
+if [ "$GUARD_EXIT" -ne 0 ]; then
+  N8N_MSG="${N8N_MSG}
+
+🛡️ <b>e2e guard regression (TASK-20260805-001)</b>:
+${GUARD_OUTPUT}"
+fi
+
 # ── Send Telegram notification ──────────────────────────────────
 send_telegram() {
   local message="$1"
