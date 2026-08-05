@@ -1,0 +1,68 @@
+# TASK-20260805-001 — known, pre-existing e2e specs that drive Playwright
+# without going through fixtures/isolated-page.js AND without a GUARD-EXEMPT
+# comment, frozen as of 2026-08-05.
+#
+# This is a RATCHET, not a pass: these 39 files are acknowledged debt, not
+# reviewed/cleared. check-e2e-guard-imports.sh does NOT alert on files
+# listed here so today's introduction of the check doesn't flood the nightly
+# Telegram report with 39 lines of pre-existing risk on day one — but it
+# WILL alert on:
+#   - any NEW *.spec.js that imports playwright and isn't in this list
+#     (the actual regression class this task exists to catch, per
+#     BUG-20260804-018/BUG-20260731-002)
+#   - any file REMOVED from this list that then regresses back to being
+#     unguarded (can't happen silently — removing a line here is a
+#     deliberate, reviewed, committed action, same discipline as
+#     lint-bug-cards.sh's V2_CUTOFF baseline for legacy cards)
+#
+# Every file listed here has AT LEAST ONE page.route()/context.route() call
+# (confirmed via grep during this task — none are running fully unmocked),
+# so this is "not verified against the shared guard's specific endpoint
+# list" debt, not "definitely wide open" debt — still worth a dedicated
+# follow-up card, not a fire alarm. Flagged to Alex/Nacho separately from
+# this task's own scope (adding the tripwire), not migrated here.
+#
+# To clear a file: either migrate it to fixtures/isolated-page.js
+# (installIsolationGuard) or verify its own route() is Rule-12 compliant
+# (GET mock, ALL non-GET absorbed) and add a GUARD-EXEMPT: comment instead —
+# then remove its line from this file in the SAME commit.
+agreedPriceCounterOfferBUG007.spec.js
+brokerConsoleDirBUG001.spec.js
+brokerDisplayIsolationBUG730001.spec.js
+creditCapBrokerScopeBUG20260802008.spec.js
+dirBadgeBrowserFlow.spec.js
+iNetBUG005.spec.js
+iNetBUG006.spec.js
+iNetCommissionRateFEAT20260802001.spec.js
+iNetCreditLimitsFEAT002.spec.js
+iNetHRVolBUG20260801008.spec.js
+iNetHRVolBUG20260802003.spec.js
+iNetPolishBUG004.spec.js
+iNetPositionIdBUG006.spec.js
+iNetRedesignFEAT001.spec.js
+iNetResultsTradeDealsConsistencyBUG20260803007.spec.js
+iNetRingClosureBUG004.spec.js
+iNetStatsFEAT20260801001.spec.js
+iNetSubtabsBUG001.spec.js
+iNetTableFixesBUG005.spec.js
+internalNettingFEAT002.spec.js
+internalNettingPriceErrorSurfacesBUG20260804011.spec.js
+intraBrokerNettingBUG007.spec.js
+mirrorSellBuyBUG008.spec.js
+mlDealsVisibilityBUG010.spec.js
+mlDiscountEfpAdminBUG008.spec.js
+mlIncompletePairFilterBUG20260803005.spec.js
+mlNumberingTraderBUG006.spec.js
+mlOwnerPriceSyncBUG20260803009.spec.js
+mlStaleDealFilterBUG009.spec.js
+mlTakeButtonPriceBUG007.spec.js
+mlTakeButtonVisibilityBUG20260803008.spec.js
+mlTakeCounterBUG009.spec.js
+mlTakePendingBUG20260803006.spec.js
+mlVenueFEAT003.spec.js
+negotiatedPriceBUG010.spec.js
+negotiatedPriceBrowserFlow.spec.js
+nettingResultsBUG003_001ResultsTab.spec.js
+nettingWebhookBUG20260802007.spec.js
+ringChainResultsBUG005.spec.js
+traderHistoryTabBUG20260803003.spec.js
