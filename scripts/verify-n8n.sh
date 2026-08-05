@@ -108,6 +108,15 @@ MAP=(
   "Kt71Tsx9cPLTns57|Fetch iNet Data|$R4G_DIR/admin_financials_fetch_inet_data.js"
   "NAPvI3oGvRxRabkt|Parse POST iNet Credits|$R4G_DIR/inet_credits_parse_post.js"
   "NAPvI3oGvRxRabkt|Parse GET iNet Credits|$R4G_DIR/inet_credits_parse_get.js"
+
+  # ── FEAT-20260805-004: account_purge.js, ONE file deployed unchanged into
+  # all six workflows that hold client data (revoke access / delete account) ──
+  "JRld7fH2T4iMHHKB|Account Purge|$R4G_DIR/account_purge.js"
+  "5AYqEk27XKzbmhg8|Account Purge|$R4G_DIR/account_purge.js"
+  "AibeoQC5WwY5mmN7|Account Purge|$R4G_DIR/account_purge.js"
+  "pXoEwtpYF3q5MklB|Account Purge|$R4G_DIR/account_purge.js"
+  "8ESm4382Ixh2J2cN|Account Purge|$R4G_DIR/account_purge.js"
+  "wcvKhSOUyaKzPsAM|Account Purge|$R4G_DIR/account_purge.js"
 )
 
 TMP="$(mktemp -d)"
