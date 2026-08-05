@@ -37,8 +37,11 @@ if [ -z "$N8N_KEY" ]; then
 fi
 
 # ── Map: workflow_id | node name | repo file ──
-# R4G_ML_State_v1_FIXED = keQOweGX4eAkLyUc (active ML workflow)
+# R4G_ML_State_v1_FIXED    = keQOweGX4eAkLyUc (active ML workflow)
 # R4G_Set1_Solutions_Frontend_v1 = R5LHPUynalETS74X (netting engine)
+# R4G_BrokerSync_v1        = JRld7fH2T4iMHHKB (client storage: positions, rounds, keys)
+# R4G_ShareConfig_v1       = wcvKhSOUyaKzPsAM (client share link)
+# R4G_Broker_Config_Sync   = 8ESm4382Ixh2J2cN (account config)
 MAP=(
   "keQOweGX4eAkLyUc|Code: ML Accept FIXED|$R4G_DIR/ml_accept_fix.js"
   "keQOweGX4eAkLyUc|Code: ML Price Proposal|$R4G_DIR/ml_price_proposal.js"
@@ -46,6 +49,27 @@ MAP=(
   "keQOweGX4eAkLyUc|Code: ML Start|$R4G_DIR/ml_start_fix.js"
   "keQOweGX4eAkLyUc|Code: ML Stop|$R4G_DIR/ml_stop_fix.js"
   "R5LHPUynalETS74X|Compute Plans|$R4G_DIR/netting_compute_plans_v2.js"
+
+  # ── Client storage (FEAT-20260805-003 step 0) ──
+  # Every Code node of the three storage workflows is mirrored, so a change to
+  # how client history is kept can no longer happen outside git.
+  "JRld7fH2T4iMHHKB|Store Broker Rows|$R4G_DIR/broker_store_rows.js"
+  "JRld7fH2T4iMHHKB|Get All Broker Rows|$R4G_DIR/broker_get_all_rows.js"
+  "JRld7fH2T4iMHHKB|Save Netting Results|$R4G_DIR/broker_save_netting_results.js"
+  "JRld7fH2T4iMHHKB|Get Netting Results|$R4G_DIR/broker_get_netting_results.js"
+  "JRld7fH2T4iMHHKB|Get Netting Log|$R4G_DIR/broker_get_netting_log.js"
+  "JRld7fH2T4iMHHKB|Get Trader Log|$R4G_DIR/broker_log_trader.js"
+  "JRld7fH2T4iMHHKB|Clear Broker Data|$R4G_DIR/broker_clear_data.js"
+  "JRld7fH2T4iMHHKB|Purge Stale Data|$R4G_DIR/broker_purge_stale.js"
+  "JRld7fH2T4iMHHKB|Get API Keys|$R4G_DIR/broker_api_keys_get.js"
+  "JRld7fH2T4iMHHKB|Generate API Key|$R4G_DIR/broker_api_key_generate.js"
+  "JRld7fH2T4iMHHKB|Generate Admin Key|$R4G_DIR/broker_admin_key_generate.js"
+  "JRld7fH2T4iMHHKB|Register Callback|$R4G_DIR/broker_callback_register.js"
+  "JRld7fH2T4iMHHKB|Get Callbacks|$R4G_DIR/broker_callbacks_get.js"
+  "wcvKhSOUyaKzPsAM|Store Config|$R4G_DIR/share_config_store.js"
+  "wcvKhSOUyaKzPsAM|Get Config|$R4G_DIR/share_config_get.js"
+  "8ESm4382Ixh2J2cN|Store Broker Config|$R4G_DIR/broker_config_store.js"
+  "8ESm4382Ixh2J2cN|Return Broker Config|$R4G_DIR/broker_config_return.js"
 )
 
 TMP="$(mktemp -d)"
