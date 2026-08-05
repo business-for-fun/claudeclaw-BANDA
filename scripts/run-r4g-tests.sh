@@ -109,6 +109,25 @@ if [ "$GUARD_EXIT" -ne 0 ]; then
 ${GUARD_OUTPUT}"
 fi
 
+# ── e2e startup smoke check (BUG-20260805-006 Part 3) ────────────
+# Cheap "does it even start" pass over every *.spec.js — catches the exact
+# silent-breakage class BUG-20260805-006 was (12 files unrunnable for 6
+# days, nothing in the nightly run ever executed them). Not a full scenario
+# run — see smoke-e2e-specs.sh header for the classification rules.
+SMOKE_EXIT=0
+SMOKE_OUTPUT="$(bash "$SCRIPT_DIR/smoke-e2e-specs.sh" 2>&1)" || SMOKE_EXIT=$?
+{
+  echo ""
+  echo "── e2e startup smoke (smoke-e2e-specs.sh, exit $SMOKE_EXIT) ──"
+  echo "$SMOKE_OUTPUT"
+} >> "$RESULT_FILE"
+if [ "$SMOKE_EXIT" -ne 0 ]; then
+  N8N_MSG="${N8N_MSG}
+
+🧪 <b>e2e startup smoke FAILED (BUG-20260805-006)</b>:
+${SMOKE_OUTPUT}"
+fi
+
 # ── Send Telegram notification ──────────────────────────────────
 send_telegram() {
   local message="$1"
