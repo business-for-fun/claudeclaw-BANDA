@@ -91,10 +91,17 @@ docker compose -f <compose-file> restart <service>
 
 ## SSH to VMs
 ```bash
-ssh -o BatchMode=yes ubuntu@10.128.0.5 '<command>'  # r4g
+ssh -o BatchMode=yes -i ~/.ssh/openclaw_ops_ed25519 amileev@10.128.0.5 '<command>'  # r4g
 ssh -o BatchMode=yes ubuntu@10.128.0.7 '<command>'  # limo
 ssh -o BatchMode=yes amileev@10.128.0.3 '<command>' # fam
 ```
+⚠️ **r4g корректирован 2026-08-06 (BUG-20260806-005 follow-up):** `ubuntu@10.128.0.5`
+было задокументировано неверно с апреля — на VM ЕСТЬ юзер `ubuntu` (uid 1000),
+но мой SSH-ключ не в его `authorized_keys`, только в `amileev`'s → "Permission
+denied" был не признаком сломанного доступа, а неверной строки в этом же
+файле. Рабочий доступ: `amileev@10.128.0.5` + явный `-i ~/.ssh/openclaw_ops_ed25519`
+(без `-i` дефолтный ключ агента может не совпадать — указывать явно).
+`sudo` на этом хосте под `amileev` — passwordless (`sudo -n true` проходит).
 
 ## GCP Access
 
