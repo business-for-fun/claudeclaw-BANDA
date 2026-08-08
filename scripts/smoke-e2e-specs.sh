@@ -97,12 +97,24 @@ CRASH_THRESHOLD_MS=3000  # a non-zero exit before this is "didn't start", not "t
 
 # BUG-20260808-001 — see header. The marker a spec uses to opt out of step 2.
 SKIP_MARKER='@e2e-smoke-skip-live-start'
-# Safety net: the production broker-config endpoint, and a Node-side POST.
-# Both must be present for a file to look like a writer. Browser-side mocks
+# Safety net: the broker-config endpoint, and a Node-side POST to it. Both must
+# be present for a file to look like a writer. Browser-side mocks
 # (`page.route`) and baseline GETs match the first pattern but not the second,
 # which is why the two are separate conditions rather than one.
-PROD_CONFIG_URL_RE='https://r4g\.business-for-fun\.com/webhook/r4g/broker-config'
-CONFIG_WRITE_RE='(apiPost|postJson|httpPost)[[:space:]]*\([[:space:]]*[A-Z_]*CONFIG[A-Z_]*|(apiPost|postJson|httpPost)[[:space:]]*\([[:space:]]*.https://r4g\.business-for-fun\.com/webhook/r4g/broker-config'
+#
+# The endpoint is matched by PATH, not by the full production URL, and that is
+# load-bearing: only 7 of the 14 specs that talk to this endpoint spell the URL
+# out. The other half build it as `${N8N_BASE}/broker-config`, and N8N_BASE is
+# 'https://r4g.business-for-fun.com/webhook/r4g' in every one of them. A regex
+# anchored on the literal URL passes those files straight through to step 2 —
+# which is the very failure this guard exists to prevent.
+CONFIG_PATH_RE='broker-config'
+# Call sites, not helper definitions: every one of these helpers is generic, so
+# the danger is in what it is CALLED with. The helper names are the ones this
+# suite actually defines (apiPost/postJson/postToBackend/postNetting); an
+# unknown future helper is the known gap, and the durable answer to it is the
+# admin key on the write path (part 2 of this card), not a longer list.
+CONFIG_WRITE_RE='(apiPost|postJson|postToBackend|postNetting|httpPost)[[:space:]]*\([[:space:]]*[A-Za-z_]*CONFIG[A-Za-z_]*|(apiPost|postJson|postToBackend|postNetting|httpPost)[[:space:]]*\([[:space:]]*.[^,]*broker-config'
 
 FAIL=0
 OUT=""
@@ -133,7 +145,7 @@ for f in "$E2E_DIR"/*.spec.js; do
   grep -qF "$SKIP_MARKER" "$f" && HAS_MARKER=1
 
   LOOKS_LIKE_WRITER=0
-  if grep -qE "$PROD_CONFIG_URL_RE" "$f" && grep -qE "$CONFIG_WRITE_RE" "$f"; then
+  if grep -qE "$CONFIG_PATH_RE" "$f" && grep -qE "$CONFIG_WRITE_RE" "$f"; then
     LOOKS_LIKE_WRITER=1
   fi
 
@@ -150,35 +162,6 @@ for f in "$E2E_DIR"/*.spec.js; do
       SKIPPED_NOTE+="   · $base — live start skipped (unmarked writer, flagged above)"$'\n'
       FAIL=1
     fi
-    continue
-  fi
-
-  # ── Step 1b: may this file be RUN at all? (BUG-20260808-001) ────────
-  # Running a spec means running its opening moves, and this script kills it
-  # part-way by design. A spec whose opening move revokes a broker's access to
-  # a feature must therefore never reach step 2.
-  HAS_MARKER=0
-  grep -q -- "$SKIP_MARKER" "$f" && HAS_MARKER=1
-  LOOKS_WRITER=0
-  if grep -qE "$PROD_CONFIG_URL_RE" "$f" && grep -qE "$CONFIG_WRITE_RE" "$f"; then
-    LOOKS_WRITER=1
-  fi
-
-  if [ "$HAS_MARKER" -eq 1 ]; then
-    REASON="$(grep -m1 -o -- "$SKIP_MARKER.*" "$f" | sed "s/^$SKIP_MARKER:*[[:space:]]*//")"
-    SKIPPED_LIVE=$((SKIPPED_LIVE + 1))
-    SKIPPED_NOTE+="   • $base — ${REASON:-no reason given}"$'\n'
-    continue
-  fi
-
-  if [ "$LOOKS_WRITER" -eq 1 ]; then
-    # Skipped anyway — safety first — but the run FAILS, because an unmarked
-    # writer means nobody has consciously decided this file is safe. The fix is
-    # one comment line in the spec, not a change here.
-    SKIPPED_LIVE=$((SKIPPED_LIVE + 1))
-    SKIPPED_NOTE+="   • $base — writes to the production broker-config, marker MISSING"$'\n'
-    OUT+="❌ $base: posts to the production broker-config but carries no $SKIP_MARKER marker — not run. Add the marker with a reason, or stop writing to production from a spec."$'\n'
-    FAIL=1
     continue
   fi
 
