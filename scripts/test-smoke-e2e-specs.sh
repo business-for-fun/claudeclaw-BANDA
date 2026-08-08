@@ -59,6 +59,44 @@ cat > "$FIXTURE_DIR/bad-require.spec.js" <<'EOF'
 require('this-module-does-not-exist-xyz123');
 EOF
 
+# ── BUG-20260808-001 fixtures ────────────────────────────────────────────
+# The live-start step must refuse to START a spec that writes to the
+# production broker-config. Both halves of that rule are tested: the marked
+# file must be skipped SILENTLY-BUT-REPORTED (not flagged as broken), and the
+# unmarked one must be flagged AND skipped. The marker check has to beat the
+# crash check, so both fixtures also crash instantly — if the runner started
+# them, the fast-crash classifier would flag them and the assertions below
+# would tell us apart from a real skip.
+
+cat > "$FIXTURE_DIR/marked-prod-writer.spec.js" <<'EOF'
+// negative-test fixture: writes to the production broker-config AND carries
+// the opt-out marker — must be skipped, must NOT be flagged.
+// @e2e-smoke-skip-live-start: pre-flight POST would disable the feature
+const BROKER_CONFIG_API = 'https://r4g.business-for-fun.com/webhook/r4g/broker-config';
+async function apiPost() {}
+apiPost(BROKER_CONFIG_API, { brokerSettings: { '01': { allowInternalNetting: false } } });
+throw new Error('this fixture must never be executed by the smoke runner');
+EOF
+
+cat > "$FIXTURE_DIR/unmarked-prod-writer.spec.js" <<'EOF'
+// negative-test fixture: writes to the production broker-config and FORGOT
+// the marker — must be flagged (red build) and still not executed.
+const BROKER_CONFIG_API = 'https://r4g.business-for-fun.com/webhook/r4g/broker-config';
+async function apiPost() {}
+apiPost(BROKER_CONFIG_API, { brokerSettings: { '01': { allowInternalNetting: false } } });
+throw new Error('this fixture must never be executed by the smoke runner');
+EOF
+
+cat > "$FIXTURE_DIR/good-config-reader.spec.js" <<'EOF'
+// negative-test fixture: mentions the production broker-config but only READS
+// it (baseline snapshot) — must keep its live-start step, must NOT be skipped.
+// Guards against the safety net becoming so eager it excludes half the suite.
+const BROKER_CONFIG_API = 'https://r4g.business-for-fun.com/webhook/r4g/broker-config';
+async function apiGet() {}
+apiGet(BROKER_CONFIG_API);
+setInterval(() => {}, 1000);
+EOF
+
 RUN_OUT="$(E2E_DIR="$FIXTURE_DIR" bash "$SCRIPT_DIR/smoke-e2e-specs.sh" 2>&1)"
 RUN_EXIT=$?
 
@@ -87,10 +125,38 @@ assert_not_flagged() {
 echo "── smoke-e2e-specs.sh self-test (E2E_DIR=$FIXTURE_DIR) ──"
 echo "$RUN_OUT"
 echo "── verdicts ──"
+assert_skipped_live() {
+  local file="$1"
+  if echo "$RUN_OUT" | grep -q "· $file — live start skipped"; then
+    echo "  ✅ $file live start correctly skipped (and reported, not silent)"
+  else
+    echo "  ❌ $file was NOT skipped — the runner would write to production"
+    FAIL=1
+  fi
+}
+
+assert_not_skipped_live() {
+  local file="$1"
+  if echo "$RUN_OUT" | grep -q "· $file — live start skipped"; then
+    echo "  ❌ $file WRONGLY skipped — the safety net is eating healthy coverage"
+    FAIL=1
+  else
+    echo "  ✅ $file kept its live-start step"
+  fi
+}
+
 assert_not_flagged "good-fast.spec.js"
 assert_not_flagged "good-longrunning.spec.js"
 assert_flagged "bad-syntax.spec.js"
 assert_flagged "bad-require.spec.js"
+
+# BUG-20260808-001 — the prod-config rule, both halves plus its boundary.
+assert_skipped_live     "marked-prod-writer.spec.js"
+assert_not_flagged      "marked-prod-writer.spec.js"
+assert_skipped_live     "unmarked-prod-writer.spec.js"
+assert_flagged          "unmarked-prod-writer.spec.js"
+assert_not_skipped_live "good-config-reader.spec.js"
+assert_not_flagged      "good-config-reader.spec.js"
 
 if [ "$RUN_EXIT" -ne 1 ]; then
   echo "  ❌ overall exit code was $RUN_EXIT, expected 1 (fixture dir has broken files)"

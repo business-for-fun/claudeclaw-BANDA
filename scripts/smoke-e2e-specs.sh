@@ -41,8 +41,47 @@
 #          concern, covered by Kim's per-card verification and manual runs,
 #          not this cheap smoke check.
 #
+# ── BUG-20260808-001: the live-start step must never write to production ──
+#
+# On 2026-08-08 at 02:04:51 UTC this script disabled the iNet feature for every
+# broker. Step 2 started allowInternalNettingServerSideBUG002.spec.js, whose
+# FIRST action is a pre-flight `POST /webhook/r4g/broker-config` setting
+# allowInternalNetting=false for brokers 01 and 02 — against the PRODUCTION
+# endpoint, hardcoded. Five seconds later we killed the process, long before it
+# reached the line that turns the flag back on. The nightly report said
+# "✅ 61 *.spec.js все стартуют", which was true and beside the point.
+#
+# The hole was structural, not a mistake in that spec: this script exists to
+# kill processes half-way, so ANY spec whose opening move mutates shared state
+# leaves that state mutated. So the rule here is about the runner, not about
+# one file:
+#
+#   A spec that writes to the production broker-config does not get the
+#   live-start step. It still gets `node --check`, which is the step that
+#   actually catches the break this script was written for (BUG-20260805-006).
+#
+# Two mechanisms, deliberately separate:
+#
+#   1. MECHANISM — an explicit marker comment in the spec:
+#          @e2e-smoke-skip-live-start: <reason>
+#      Exact, self-documenting, no guessing from source text.
+#
+#   2. SAFETY NET — a conservative pattern match for "posts to the production
+#      broker-config". A file that looks like a writer but carries no marker is
+#      FLAGGED (the run fails) *and* skipped anyway. Over-eager by design: the
+#      cost of a false positive is someone adding one comment line; the cost of
+#      a false negative is the incident above, on production, at 02:04 UTC.
+#
+# Deliberate boundary, stated rather than left implicit: this guards the broker
+# CONFIG endpoint only — the flag that decides whether a broker can reach the
+# feature at all. Specs that POST rounds to other production endpoints append
+# to history rather than revoke access, and are out of scope here; the durable
+# answer for all of them is the admin key on the write path (part 2 of this
+# card), not a longer regex.
+#
 # Usage: bash scripts/smoke-e2e-specs.sh
-# Exit:  0 = every file starts cleanly, 1 = at least one failed to start
+# Exit:  0 = every file starts cleanly, 1 = at least one failed to start, or a
+#            prod-config writer is missing its marker
 # ─────────────────────────────────────────────────────────────────
 set -uo pipefail
 
@@ -56,9 +95,20 @@ export NODE_PATH="${NODE_PATH:-/usr/lib/node_modules}"
 STARTUP_TIMEOUT=5     # seconds — window we let each process run before killing it
 CRASH_THRESHOLD_MS=3000  # a non-zero exit before this is "didn't start", not "test failed"
 
+# BUG-20260808-001 — see header. The marker a spec uses to opt out of step 2.
+SKIP_MARKER='@e2e-smoke-skip-live-start'
+# Safety net: the production broker-config endpoint, and a Node-side POST.
+# Both must be present for a file to look like a writer. Browser-side mocks
+# (`page.route`) and baseline GETs match the first pattern but not the second,
+# which is why the two are separate conditions rather than one.
+PROD_CONFIG_URL_RE='https://r4g\.business-for-fun\.com/webhook/r4g/broker-config'
+CONFIG_WRITE_RE='(apiPost|postJson|httpPost)[[:space:]]*\([[:space:]]*[A-Z_]*CONFIG[A-Z_]*|(apiPost|postJson|httpPost)[[:space:]]*\([[:space:]]*.https://r4g\.business-for-fun\.com/webhook/r4g/broker-config'
+
 FAIL=0
 OUT=""
 CHECKED=0
+SKIPPED_LIVE=0
+SKIPPED_NOTE=""
 TMP_ERR="/tmp/smoke-e2e-check-err.$$"
 TMP_RUN="/tmp/smoke-e2e-run-out.$$"
 trap 'rm -f "$TMP_ERR" "$TMP_RUN"' EXIT
@@ -71,6 +121,63 @@ for f in "$E2E_DIR"/*.spec.js; do
   # ── Step 1: static check ──────────────────────────────────────────
   if ! node --check "$f" 2>"$TMP_ERR"; then
     OUT+="❌ $base: node --check FAILED — $(head -1 "$TMP_ERR")"$'\n'
+    FAIL=1
+    continue
+  fi
+
+  # ── Step 1b: may this file be STARTED at all? (BUG-20260808-001) ────
+  # Runs after `node --check`, so a prod-config writer still gets the check
+  # that matters most, and before anything is executed, so the answer cannot
+  # arrive too late.
+  HAS_MARKER=0
+  grep -qF "$SKIP_MARKER" "$f" && HAS_MARKER=1
+
+  LOOKS_LIKE_WRITER=0
+  if grep -qE "$PROD_CONFIG_URL_RE" "$f" && grep -qE "$CONFIG_WRITE_RE" "$f"; then
+    LOOKS_LIKE_WRITER=1
+  fi
+
+  if [ "$HAS_MARKER" -eq 1 ] || [ "$LOOKS_LIKE_WRITER" -eq 1 ]; then
+    # Skip the live start either way — including the unmarked case, so a
+    # forgotten marker costs a red build, never a production write.
+    SKIPPED_LIVE=$((SKIPPED_LIVE + 1))
+    if [ "$HAS_MARKER" -eq 1 ]; then
+      REASON="$(grep -oE "$SKIP_MARKER:?[[:space:]]*.*" "$f" | head -1 | sed "s/$SKIP_MARKER:\?[[:space:]]*//")"
+      SKIPPED_NOTE+="   · $base — live start skipped: ${REASON:-marked, no reason given}"$'\n'
+    else
+      OUT+="❌ $base: posts to the PRODUCTION broker-config but carries no $SKIP_MARKER marker. "
+      OUT+="Add the marker (with a reason) or stop the spec writing to production — see BUG-20260808-001."$'\n'
+      SKIPPED_NOTE+="   · $base — live start skipped (unmarked writer, flagged above)"$'\n'
+      FAIL=1
+    fi
+    continue
+  fi
+
+  # ── Step 1b: may this file be RUN at all? (BUG-20260808-001) ────────
+  # Running a spec means running its opening moves, and this script kills it
+  # part-way by design. A spec whose opening move revokes a broker's access to
+  # a feature must therefore never reach step 2.
+  HAS_MARKER=0
+  grep -q -- "$SKIP_MARKER" "$f" && HAS_MARKER=1
+  LOOKS_WRITER=0
+  if grep -qE "$PROD_CONFIG_URL_RE" "$f" && grep -qE "$CONFIG_WRITE_RE" "$f"; then
+    LOOKS_WRITER=1
+  fi
+
+  if [ "$HAS_MARKER" -eq 1 ]; then
+    REASON="$(grep -m1 -o -- "$SKIP_MARKER.*" "$f" | sed "s/^$SKIP_MARKER:*[[:space:]]*//")"
+    SKIPPED_LIVE=$((SKIPPED_LIVE + 1))
+    SKIPPED_NOTE+="   • $base — ${REASON:-no reason given}"$'\n'
+    continue
+  fi
+
+  if [ "$LOOKS_WRITER" -eq 1 ]; then
+    # Skipped anyway — safety first — but the run FAILS, because an unmarked
+    # writer means nobody has consciously decided this file is safe. The fix is
+    # one comment line in the spec, not a change here.
+    SKIPPED_LIVE=$((SKIPPED_LIVE + 1))
+    SKIPPED_NOTE+="   • $base — writes to the production broker-config, marker MISSING"$'\n'
+    OUT+="❌ $base: posts to the production broker-config but carries no $SKIP_MARKER marker — not run. Add the marker with a reason, or stop writing to production from a spec."$'\n'
     FAIL=1
     continue
   fi
@@ -97,10 +204,18 @@ for f in "$E2E_DIR"/*.spec.js; do
 done
 
 if [ "$FAIL" -eq 0 ]; then
-  echo "✅ e2e startup smoke: $CHECKED *.spec.js все стартуют"
+  echo "✅ e2e startup smoke: $CHECKED *.spec.js проверены, $((CHECKED - SKIPPED_LIVE)) запущены — все стартуют"
 else
   echo "❌ e2e startup smoke — FAILURES:"
   printf '%s' "$OUT"
+fi
+
+# Never let a skip pass as coverage. A silent exclusion reads as "we ran
+# everything" — which is exactly how the nightly reported success on the night
+# it broke production (BUG-20260808-001).
+if [ "$SKIPPED_LIVE" -gt 0 ]; then
+  echo "ℹ️  live-start step skipped for $SKIPPED_LIVE of $CHECKED file(s) — node --check still applied:"
+  printf '%s' "$SKIPPED_NOTE"
 fi
 
 exit $FAIL
