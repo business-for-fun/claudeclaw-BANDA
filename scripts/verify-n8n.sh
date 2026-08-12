@@ -119,6 +119,17 @@ MAP=(
   "pXoEwtpYF3q5MklB|Account Purge|$R4G_DIR/account_purge.js"
   "8ESm4382Ixh2J2cN|Account Purge|$R4G_DIR/account_purge.js"
   "wcvKhSOUyaKzPsAM|Account Purge|$R4G_DIR/account_purge.js"
+
+  # ── FEAT-20260811-009 / TASK-20260812-003: auth_gate.js, ONE file deployed
+  # unchanged as the first node of a webhook branch wherever a data node needs
+  # __identity. Found live by content match (header comment), was missing
+  # from this MAP entirely before TASK-20260812-003's sync. ──
+  "JRld7fH2T4iMHHKB|Auth Gate: Store Broker Rows|$R4G_DIR/auth_gate.js"
+  "JRld7fH2T4iMHHKB|Auth Gate: Get All Broker Rows|$R4G_DIR/auth_gate.js"
+  "JRld7fH2T4iMHHKB|Auth Gate: Get Netting Results|$R4G_DIR/auth_gate.js"
+  "JRld7fH2T4iMHHKB|Auth Gate: Get Netting Log|$R4G_DIR/auth_gate.js"
+  "JRld7fH2T4iMHHKB|Auth Gate: Register Callback|$R4G_DIR/auth_gate.js"
+  "AibeoQC5WwY5mmN7|Auth Gate: Store Broker Credits|$R4G_DIR/auth_gate.js"
 )
 
 TMP="$(mktemp -d)"
