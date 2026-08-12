@@ -56,6 +56,7 @@ MAP=(
   # ── TASK-20260805-002: 12 repo files found matching live nodes but
   # missing from this MAP (Gale full scan, FEAT-20260805-003 step 0) ──
   "pXoEwtpYF3q5MklB|Compute Internal Netting|$R4G_DIR/internal_netting_v1.js"
+  "JuqXmAGnOwEu2EAO|Read iNet History|$R4G_DIR/inet_history_v1.js"
   "pXoEwtpYF3q5MklB|Parse Webhook Input|$R4G_DIR/inet_parse_webhook_input.js"
   "pXoEwtpYF3q5MklB|Inject iNet Credits|$R4G_DIR/inet_inject_credits.js"
   "pXoEwtpYF3q5MklB|Parse Stats Query|$R4G_DIR/parse_stats_query.js"
