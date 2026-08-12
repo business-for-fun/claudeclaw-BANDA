@@ -52,6 +52,7 @@ MAP=(
   "R5LHPUynalETS74X|Netting Engine Router|$R4G_DIR/netting_engine_router.js"
   "R5LHPUynalETS74X|Parse Webhook Input|$R4G_DIR/netting_parse_webhook_input.js"
   "R5LHPUynalETS74X|Return Summary|$R4G_DIR/netting_return_summary.js"
+  "msf8JIo4EPHgs8D1|Identity Store|$R4G_DIR/identity_store.js"
 
   # ── TASK-20260805-002: 12 repo files found matching live nodes but
   # missing from this MAP (Gale full scan, FEAT-20260805-003 step 0) ──
