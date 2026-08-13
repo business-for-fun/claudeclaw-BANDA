@@ -42,7 +42,9 @@ fi
 # R4G_BrokerSync_v1        = JRld7fH2T4iMHHKB (client storage: positions, rounds, keys)
 # R4G_ShareConfig_v1       = wcvKhSOUyaKzPsAM (client share link)
 # R4G_Broker_Config_Sync   = 8ESm4382Ixh2J2cN (account config)
+# R4G_MagicLinkAuth_v1     = qxfcoufVHADECeyH (FEAT-20260811-008: login, public webhook r4g/auth)
 MAP=(
+  "qxfcoufVHADECeyH|Magic Link Auth|$R4G_DIR/magic_link_auth.js"
   "keQOweGX4eAkLyUc|Code: ML Accept FIXED|$R4G_DIR/ml_accept_fix.js"
   "keQOweGX4eAkLyUc|Code: ML Price Proposal|$R4G_DIR/ml_price_proposal.js"
   "keQOweGX4eAkLyUc|Code: Get ML State FIXED|$R4G_DIR/ml_state_fix.js"
