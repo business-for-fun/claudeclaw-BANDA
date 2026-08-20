@@ -135,3 +135,12 @@ if old in content:
 
 # R4G_Debug observer: log group messages for context (survives updates)
 python3 scripts/patches/r4g-debug-observer.py 2>/dev/null || true
+
+# Patch: bounded timeout on sendTyping — this call runs before the agent's
+# own soft/hard-deadline safety net, so an unbounded hang here can wedge a
+# chat's message queue for hours with no auto-recovery. Root cause of the
+# 2026-08-19/20 19h-stuck DM incident (Nacho). See memory:
+# project_banda_sendtyping_hang_20260820.
+if grep -q "await api.sendChatAction(chatId, 'typing');" src/bot.ts; then
+  sed -i "s/await api.sendChatAction(chatId, 'typing');/await api.sendChatAction(chatId, 'typing', undefined, AbortSignal.timeout(5000) as any);/" src/bot.ts
+fi

@@ -38,8 +38,8 @@ import { emitChatEvent, setProcessing, setActiveAbort, abortActiveQuery } from '
 // On a fresh session the base overhead (system prompt, skills, CLAUDE.md,
 // MCP tools) can be 200-400k+ tokens. We track that baseline per session
 // so the warning reflects conversation growth, not fixed overhead.
-const CONTEXT_WARN_PCT = 0.75; // Warn when conversation fills 75% of available space
-const CONTEXT_AUTO_RESET_PCT = 0.80; // Auto-reset session when conversation fills 80% of available space
+const CONTEXT_WARN_PCT = 0.60; // Warn when conversation fills 60% of available space
+const CONTEXT_AUTO_RESET_PCT = 0.65; // Auto-reset session when conversation fills 65% of available space (lowered 2026-08-12 from 80% — a session that grew past the old threshold hung silently on resume before any call could complete and trigger this check; resetting earlier reduces exposure)
 const lastUsage = new Map<string, UsageInfo>();
 // sessionBaseline is now persisted in SQLite (sessions.baseline_tokens)
 // so it survives process restarts. In-memory cache for fast reads:
@@ -342,7 +342,14 @@ export function extractFileMarkers(text: string): ExtractResult {
  */
 async function sendTyping(api: Api<RawApi>, chatId: number): Promise<void> {
   try {
-    await api.sendChatAction(chatId, 'typing');
+    // Bounded timeout (2026-08-20): this call sits BEFORE the agent's own
+    // soft/hard-deadline safety net (see handleMessage), so if it hangs here
+    // — e.g. a stuck Telegram API connection — nothing downstream ever runs
+    // to unblock the per-chat message queue. Root cause of a 19h stuck DM
+    // session on 2026-08-19/20. See memory: project_banda_sendtyping_hang_20260820.
+    // Native AbortSignal vs grammy's bundled abort-controller shim type don't
+    // match structurally in TS, but are runtime-compatible — cast needed.
+    await api.sendChatAction(chatId, 'typing', undefined, AbortSignal.timeout(5000) as any);
   } catch {
     // Ignore — typing is best-effort
   }
