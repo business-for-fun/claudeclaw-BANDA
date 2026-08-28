@@ -18,8 +18,32 @@ const RETRYABLE_STATUS_CODES = new Set([502, 503, 504]);
 const RETRY_ATTEMPTS = 3;
 const RETRY_DELAY_MS = 2000;
 
+// TASK-20260828-001: neither httpsGet nor httpsDownload had ANY timeout —
+// a plain Node `https.get()` waits forever for a response with no built-in
+// ceiling. A connection that gets established and then goes silent (no more
+// data, no FIN/RST — a common shape for the ETIMEDOUT-class network blips
+// seen in the 2026-08-27/28 incident) never fires either 'end' or 'error',
+// so neither resolve() nor reject() was ever called: the calling handler
+// hung indefinitely with no exception for message-queue.ts's old .catch()
+// to ever see. `request.setTimeout()` below is an INACTIVITY timeout (resets
+// on every chunk received), not a hard deadline — a slow-but-progressing
+// large file download keeps resetting it and is unaffected; only a genuinely
+// stalled connection trips it, and does so via the normal 'error' event
+// (request.destroy(err) triggers it), so no separate reject() call is needed.
+const REQUEST_TIMEOUT_MS = 15_000;
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** True for the shape of error our own request-timeout below produces, plus
+ *  the common Node network-failure codes (ECONNRESET/ETIMEDOUT/EPIPE and
+ *  bare "socket hang up") — none of these carry an HTTP status code, so the
+ *  pre-existing status-code-only retry check in httpsGetWithRetry never
+ *  caught them and would throw on the very first transient network blip. */
+function isRetryableNetworkError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  return /timed out|ECONNRESET|ETIMEDOUT|EPIPE|socket hang up/i.test(err.message);
 }
 
 /**
@@ -27,7 +51,7 @@ function sleep(ms: number): Promise<void> {
  */
 function httpsGet(url: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    https.get(url, (res) => {
+    const req = https.get(url, (res) => {
       // Follow redirects
       if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
         httpsGet(res.headers.location).then(resolve, reject);
@@ -43,7 +67,11 @@ function httpsGet(url: string): Promise<string> {
       res.on('data', (chunk: Buffer) => chunks.push(chunk));
       res.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
       res.on('error', reject);
-    }).on('error', reject);
+    });
+    req.on('error', reject);
+    req.setTimeout(REQUEST_TIMEOUT_MS, () => {
+      req.destroy(new Error(`Request timed out after ${REQUEST_TIMEOUT_MS}ms: ${url}`));
+    });
   });
 }
 
@@ -55,9 +83,11 @@ async function httpsGetWithRetry(url: string): Promise<string> {
     } catch (err) {
       lastErr = err;
       const status = err instanceof Error ? parseInt(err.message.match(/HTTP (\d+)/)?.[1] ?? '0') : 0;
-      if (!RETRYABLE_STATUS_CODES.has(status) || attempt === RETRY_ATTEMPTS) break;
+      const retryable = RETRYABLE_STATUS_CODES.has(status) || isRetryableNetworkError(err);
+      if (!retryable || attempt === RETRY_ATTEMPTS) break;
       const safeUrl = url.replace(/\/bot[^/]+\//, '/bot[REDACTED]/');
-      logger.warn({ attempt, status, url: safeUrl }, `Telegram API transient error, retrying in ${RETRY_DELAY_MS}ms`);
+      const reason = status || (err instanceof Error ? err.message : 'unknown error');
+      logger.warn({ attempt, reason, url: safeUrl }, `Telegram API transient error, retrying in ${RETRY_DELAY_MS}ms`);
       await sleep(RETRY_DELAY_MS);
     }
   }
@@ -69,7 +99,7 @@ async function httpsGetWithRetry(url: string): Promise<string> {
  */
 function httpsDownload(url: string, dest: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    https.get(url, (res) => {
+    const req = https.get(url, (res) => {
       // Follow redirects
       if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
         httpsDownload(res.headers.location, dest).then(resolve, reject);
@@ -91,10 +121,40 @@ function httpsDownload(url: string, dest: string): Promise<void> {
         fs.unlink(dest, () => { /* ignore cleanup error */ });
         reject(err);
       });
-    }).on('error', (err) => {
+    });
+    req.on('error', (err) => {
+      fs.unlink(dest, () => { /* ignore cleanup error — file may not exist yet */ });
       reject(err);
     });
+    req.setTimeout(REQUEST_TIMEOUT_MS, () => {
+      req.destroy(new Error(`Download timed out after ${REQUEST_TIMEOUT_MS}ms: ${url}`));
+    });
   });
+}
+
+/**
+ * Retry wrapper for httpsDownload, mirroring httpsGetWithRetry — the actual
+ * file bytes (not just the getFile metadata call) had no retry at all
+ * before TASK-20260828-001, so a single transient blip mid-download failed
+ * the whole request instead of getting a second attempt.
+ */
+async function httpsDownloadWithRetry(url: string, dest: string): Promise<void> {
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= RETRY_ATTEMPTS; attempt++) {
+    try {
+      return await httpsDownload(url, dest);
+    } catch (err) {
+      lastErr = err;
+      const status = err instanceof Error ? parseInt(err.message.match(/HTTP (\d+)/)?.[1] ?? '0') : 0;
+      const retryable = RETRYABLE_STATUS_CODES.has(status) || isRetryableNetworkError(err);
+      if (!retryable || attempt === RETRY_ATTEMPTS) break;
+      const safeUrl = url.replace(/\/bot[^/]+\//, '/bot[REDACTED]/');
+      const reason = status || (err instanceof Error ? err.message : 'unknown error');
+      logger.warn({ attempt, reason, url: safeUrl }, `Telegram file download transient error, retrying in ${RETRY_DELAY_MS}ms`);
+      await sleep(RETRY_DELAY_MS);
+    }
+  }
+  throw lastErr;
 }
 
 /**
@@ -146,7 +206,7 @@ export async function downloadMedia(
 
   // Step 2: Download the file
   const downloadUrl = `https://api.telegram.org/file/bot${botToken}/${telegramFilePath}`;
-  await httpsDownload(downloadUrl, localPath);
+  await httpsDownloadWithRetry(downloadUrl, localPath);
 
   return localPath;
 }

@@ -30,6 +30,40 @@ import { messageQueue } from './message-queue.js';
 import { parseDelegation, delegateToAgent, getAvailableAgents } from './orchestrator.js';
 import { emitChatEvent, setProcessing, setActiveAbort, abortActiveQuery } from './state.js';
 
+// ── TASK-20260828-001: message-queue timeout fallback ────────────────
+// Sent when messageQueue abandons a hung handler (see message-queue.ts).
+// Deliberately a SEPARATE, short-timeout Api client rather than reusing
+// `bot.api`/`ctx.api` — those share the main bot's default client config
+// (grammy's ApiClientOptions.timeoutSeconds defaults to 500s, chosen for
+// long-polling `getUpdates`), and the whole point of this notification is
+// to reach the user even when the network path the main handler used is
+// the thing that's stuck. Lazily constructed because `activeBotToken` is
+// not guaranteed to be resolved at module import time (see createBot()).
+let fallbackApi: Api<RawApi> | undefined;
+function getFallbackApi(): Api<RawApi> {
+  if (!fallbackApi) {
+    if (!activeBotToken) {
+      throw new Error('Bot token is not set; cannot send message-queue timeout fallback.');
+    }
+    fallbackApi = new Api(activeBotToken, { timeoutSeconds: 15 });
+  }
+  return fallbackApi;
+}
+
+/**
+ * Passed as the `onTimeout` callback to every `messageQueue.enqueue()` call
+ * site below. messageQueue already logs the timeout and guarantees this
+ * runs after the chain has been released (see message-queue.ts) — this
+ * function's only job is getting a plain-language notice to the user.
+ */
+export async function notifyQueueTimeout(chatId: string, hungForMs: number): Promise<void> {
+  const minutes = Math.max(1, Math.round(hungForMs / 60000));
+  await getFallbackApi().sendMessage(
+    chatId,
+    `⏱ That took too long to process (stuck ~${minutes} min, likely a network issue) and was abandoned so I don't stay stuck. Please try again.`,
+  );
+}
+
 // ── Context window tracking ──────────────────────────────────────────
 // Uses input_tokens from the last API call (= actual context window size:
 // system prompt + conversation history + tool results for that call).
@@ -1343,7 +1377,9 @@ if (chatIdStr === '-1003759375768') {
   } catch (e) { /* silent */ }
 }
 
-messageQueue.enqueue(chatIdStr, () => handleMessage(ctx, enrichedText));
+messageQueue.enqueue(chatIdStr, () => handleMessage(ctx, enrichedText), (info) =>
+  notifyQueueTimeout(info.chatId, info.hungForMs),
+);
   });
 
   // Voice messages — real transcription via Groq Whisper
@@ -1369,7 +1405,11 @@ messageQueue.enqueue(chatIdStr, () => handleMessage(ctx, enrichedText));
       // Only reply with voice if explicitly requested — otherwise execute and respond in text
       const wantsVoiceBack = /\b(respond (with|via|in) voice|send (me )?(a )?voice( note| back)?|voice reply|reply (with|via) voice)\b/i.test(transcribed);
       const chatIdStr = ctx.chat!.id.toString();
-      messageQueue.enqueue(chatIdStr, () => handleMessage(ctx, `[Voice transcribed]: ${transcribed}`, wantsVoiceBack));
+      messageQueue.enqueue(
+        chatIdStr,
+        () => handleMessage(ctx, `[Voice transcribed]: ${transcribed}`, wantsVoiceBack),
+        (info) => notifyQueueTimeout(info.chatId, info.hungForMs),
+      );
     } catch (err) {
       logger.error({ err }, 'Voice transcription failed');
       await ctx.reply('Could not transcribe voice message. Try again.');
@@ -1393,7 +1433,9 @@ messageQueue.enqueue(chatIdStr, () => handleMessage(ctx, enrichedText));
       // Build vision content blocks (base64 inline image) so Claude can actually SEE the photo
       const visionContent = buildPhotoContent(localPath, ctx.message.caption ?? undefined);
       const chatIdStr = chatId.toString();
-      messageQueue.enqueue(chatIdStr, () => handleMessage(ctx, visionContent));
+      messageQueue.enqueue(chatIdStr, () => handleMessage(ctx, visionContent), (info) =>
+        notifyQueueTimeout(info.chatId, info.hungForMs),
+      );
     } catch (err) {
       logger.error({ err }, 'Photo download failed');
       await ctx.reply('Could not download photo. Try again.');
@@ -1417,7 +1459,9 @@ messageQueue.enqueue(chatIdStr, () => handleMessage(ctx, enrichedText));
       const localPath = await downloadMedia(activeBotToken, doc.file_id, filename);
       const msg = buildDocumentMessage(localPath, filename, ctx.message.caption ?? undefined);
       const chatIdStr = chatId.toString();
-      messageQueue.enqueue(chatIdStr, () => handleMessage(ctx, msg));
+      messageQueue.enqueue(chatIdStr, () => handleMessage(ctx, msg), (info) =>
+        notifyQueueTimeout(info.chatId, info.hungForMs),
+      );
     } catch (err) {
       logger.error({ err }, 'Document download failed');
       await ctx.reply('Could not download document. Try again.');
@@ -1439,7 +1483,9 @@ messageQueue.enqueue(chatIdStr, () => handleMessage(ctx, enrichedText));
       const localPath = await downloadMedia(activeBotToken, video.file_id, filename);
       const msg = buildVideoMessage(localPath, ctx.message.caption ?? undefined);
       const chatIdStr = chatId.toString();
-      messageQueue.enqueue(chatIdStr, () => handleMessage(ctx, msg));
+      messageQueue.enqueue(chatIdStr, () => handleMessage(ctx, msg), (info) =>
+        notifyQueueTimeout(info.chatId, info.hungForMs),
+      );
     } catch (err) {
       logger.error({ err }, 'Video download failed');
       await ctx.reply('Could not download video. Note: Telegram bots are limited to 20MB downloads.');
@@ -1461,7 +1507,9 @@ messageQueue.enqueue(chatIdStr, () => handleMessage(ctx, enrichedText));
       const localPath = await downloadMedia(activeBotToken, videoNote.file_id, filename);
       const msg = buildVideoMessage(localPath, undefined);
       const chatIdStr = chatId.toString();
-      messageQueue.enqueue(chatIdStr, () => handleMessage(ctx, msg));
+      messageQueue.enqueue(chatIdStr, () => handleMessage(ctx, msg), (info) =>
+        notifyQueueTimeout(info.chatId, info.hungForMs),
+      );
     } catch (err) {
       logger.error({ err }, 'Video note download failed');
       await ctx.reply('Could not download video note. Note: Telegram bots are limited to 20MB downloads.');
@@ -1497,7 +1545,9 @@ export async function processMessageFromDashboard(
 
   // Route through the message queue so dashboard messages wait for any
   // in-flight Telegram message or scheduled task to finish first.
-  messageQueue.enqueue(chatIdStr, () => processDashboardMessage(botApi, text, chatIdStr));
+  messageQueue.enqueue(chatIdStr, () => processDashboardMessage(botApi, text, chatIdStr), (info) =>
+    notifyQueueTimeout(info.chatId, info.hungForMs),
+  );
 }
 
 async function processDashboardMessage(

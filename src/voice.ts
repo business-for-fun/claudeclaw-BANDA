@@ -37,6 +37,16 @@ mkdirSync(UPLOADS_DIR, { recursive: true });
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
+// TASK-20260828-001: this file has its own independent copy of the raw
+// https.get/https.request pattern from media.ts, with the same bug — no
+// timeout at all, so a connection that stalls after being established (no
+// more data, no error) hung `downloadTelegramFile` (used for every voice
+// message, bot.ts's `message:voice` handler) forever with neither resolve
+// nor reject ever firing. Same fix: an inactivity timeout via
+// `request.setTimeout()`, which resets on every chunk received so a
+// slow-but-progressing transfer is unaffected.
+const REQUEST_TIMEOUT_MS = 15_000;
+
 /**
  * Make an HTTPS request and return the response body as a Buffer.
  */
@@ -64,6 +74,9 @@ function httpsRequest(
       res.on('error', reject);
     });
     req.on('error', reject);
+    req.setTimeout(REQUEST_TIMEOUT_MS, () => {
+      req.destroy(new Error(`Request timed out after ${REQUEST_TIMEOUT_MS}ms: ${url}`));
+    });
     if (body) req.write(body);
     req.end();
   });
@@ -74,7 +87,7 @@ function httpsRequest(
  */
 function httpsGet(url: string): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    https.get(url, (res) => {
+    const req = https.get(url, (res) => {
       // Follow a single redirect if present
       if (
         res.statusCode &&
@@ -82,12 +95,16 @@ function httpsGet(url: string): Promise<Buffer> {
         res.statusCode < 400 &&
         res.headers.location
       ) {
-        https.get(res.headers.location, (res2) => {
+        const redirected = https.get(res.headers.location, (res2) => {
           const chunks: Buffer[] = [];
           res2.on('data', (chunk: Buffer) => chunks.push(chunk));
           res2.on('end', () => resolve(Buffer.concat(chunks)));
           res2.on('error', reject);
-        }).on('error', reject);
+        });
+        redirected.on('error', reject);
+        redirected.setTimeout(REQUEST_TIMEOUT_MS, () => {
+          redirected.destroy(new Error(`Request timed out after ${REQUEST_TIMEOUT_MS}ms: ${res.headers.location}`));
+        });
         return;
       }
       const chunks: Buffer[] = [];
@@ -105,7 +122,11 @@ function httpsGet(url: string): Promise<Buffer> {
         resolve(buf);
       });
       res.on('error', reject);
-    }).on('error', reject);
+    });
+    req.on('error', reject);
+    req.setTimeout(REQUEST_TIMEOUT_MS, () => {
+      req.destroy(new Error(`Request timed out after ${REQUEST_TIMEOUT_MS}ms: ${url}`));
+    });
   });
 }
 

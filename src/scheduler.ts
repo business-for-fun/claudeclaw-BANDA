@@ -12,7 +12,7 @@ import {
 import { logger } from './logger.js';
 import { messageQueue } from './message-queue.js';
 import { runAgent } from './agent.js';
-import { formatForTelegram } from './bot.js';
+import { formatForTelegram, notifyQueueTimeout } from './bot.js';
 
 type Sender = (text: string) => Promise<void>;
 
@@ -121,7 +121,7 @@ async function runDueTasks(): Promise<void> {
       } finally {
         runningTaskIds.delete(task.id);
       }
-    });
+    }, (info) => notifyQueueTimeout(info.chatId, info.hungForMs));
   }
 }
 
