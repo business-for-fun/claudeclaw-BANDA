@@ -467,8 +467,13 @@ export function getSession(chatId: string, agentId = 'main'): string | undefined
 }
 
 export function setSession(chatId: string, sessionId: string, agentId = 'main'): void {
+  // Upsert that preserves baseline_tokens (2026-08-29): the previous
+  // INSERT OR REPLACE rewrote the whole row on every call, silently wiping
+  // baseline_tokens back to NULL — which permanently disabled the
+  // auto-reset safety net (getSessionBaseline always saw `undefined`).
   db.prepare(
-    'INSERT OR REPLACE INTO sessions (chat_id, agent_id, session_id, updated_at) VALUES (?, ?, ?, ?)',
+    `INSERT INTO sessions (chat_id, agent_id, session_id, updated_at) VALUES (?, ?, ?, ?)
+     ON CONFLICT(chat_id, agent_id) DO UPDATE SET session_id = excluded.session_id, updated_at = excluded.updated_at`,
   ).run(chatId, agentId, sessionId, new Date().toISOString());
 }
 

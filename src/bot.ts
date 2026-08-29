@@ -90,7 +90,11 @@ function checkContextWarning(chatId: string, sessionId: string | undefined, usag
     return '⚠️ Context window was auto-compacted this turn. Some earlier conversation may have been summarized. Consider /newchat + /respin if things feel off.';
   }
 
-  const contextTokens = usage.lastCallInputTokens;
+  // 2026-08-29: lastCallInputTokens alone undercounts once caching kicks in
+  // (a session with 600k+ tokens of history can report lastCallInputTokens
+  // of 1-2 while lastCallCacheRead carries the real weight) — include both
+  // so this actually reflects total context size, not just the fresh delta.
+  const contextTokens = usage.lastCallInputTokens + usage.lastCallCacheRead;
   if (contextTokens <= 0) return null;
 
   // Record baseline on first turn of session (system prompt overhead)
@@ -130,7 +134,9 @@ function checkContextWarning(chatId: string, sessionId: string | undefined, usag
 function shouldAutoReset(chatId: string, sessionId: string | undefined, usage: UsageInfo): boolean {
   if (usage.didCompact) return true; // Always auto-reset after compaction
 
-  const contextTokens = usage.lastCallInputTokens;
+  // 2026-08-29: same fix as checkContextWarning — must match that metric
+  // or baseline/comparison end up measuring two different things.
+  const contextTokens = usage.lastCallInputTokens + usage.lastCallCacheRead;
   if (contextTokens <= 0) return false;
 
   const baseKey = sessionId ?? chatId;

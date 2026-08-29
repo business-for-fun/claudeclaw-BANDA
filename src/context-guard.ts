@@ -17,8 +17,8 @@ import { clearSession, getSessionBaseline, setSessionBaseline } from './db.js';
 import { createHandoffSnapshot } from './handoff.js';
 import { logger } from './logger.js';
 
-/** Порог автосброса — как в bot.ts (CONTEXT_AUTO_RESET_PCT). */
-const DELEGATION_AUTO_RESET_PCT = 0.8;
+/** Порог автосброса — как в bot.ts (CONTEXT_AUTO_RESET_PCT). Понижен 2026-08-12, см. bot.ts. */
+const DELEGATION_AUTO_RESET_PCT = 0.65;
 
 /**
  * Проверить контекст после завершения делегированной задачи и, если он
@@ -34,7 +34,10 @@ export async function maybeAutoResetAfterDelegation(
 ): Promise<boolean> {
   if (!chatId || !usage) return false;
 
-  const contextTokens = usage.lastCallInputTokens ?? 0;
+  // 2026-08-29: include cache-read tokens — lastCallInputTokens alone
+  // undercounts once a session has meaningful history (most of its context
+  // comes back as cached, not fresh input), silently disabling this check.
+  const contextTokens = (usage.lastCallInputTokens ?? 0) + (usage.lastCallCacheRead ?? 0);
   let trigger: 'compaction' | 'threshold' | null = null;
 
   if (usage.didCompact) {
