@@ -38,6 +38,19 @@ export async function maybeAutoResetAfterDelegation(
   // undercounts once a session has meaningful history (most of its context
   // comes back as cached, not fresh input), silently disabling this check.
   const contextTokens = (usage.lastCallInputTokens ?? 0) + (usage.lastCallCacheRead ?? 0);
+
+  // 2026-08-30: absolute ceiling (see bot.ts shouldAutoReset) — protects
+  // sessions whose baseline was recorded when they were already bloated.
+  if (contextTokens >= CONTEXT_LIMIT * 0.75) {
+    try {
+      await createHandoffSnapshot(chatId, 'newchat');
+    } catch {
+      // reset anyway — a lost handoff is better than a wedged session
+    }
+    clearSession(chatId, AGENT_ID);
+    logger.info({ chatId, agent: AGENT_ID, trigger: 'absolute-ceiling', contextTokens }, 'context-guard: session auto-reset (absolute ceiling)');
+    return true;
+  }
   let trigger: 'compaction' | 'threshold' | null = null;
 
   if (usage.didCompact) {

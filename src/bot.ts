@@ -139,6 +139,13 @@ function shouldAutoReset(chatId: string, sessionId: string | undefined, usage: U
   const contextTokens = usage.lastCallInputTokens + usage.lastCallCacheRead;
   if (contextTokens <= 0) return false;
 
+  // 2026-08-30: absolute ceiling, independent of baseline. A baseline
+  // recorded on an already-bloated session (e.g. 460k) pushes the relative
+  // threshold right up against the model limit, where calls start failing
+  // with error_during_execution (Olaf hit 916k/1M — three "empty replies")
+  // before the percentage check could ever fire.
+  if (contextTokens >= CONTEXT_LIMIT * 0.75) return true;
+
   const baseKey = sessionId ?? chatId;
   const baseline = baselineCache.get(baseKey) ?? getSessionBaseline(chatId);
   if (baseline === undefined) return false;
