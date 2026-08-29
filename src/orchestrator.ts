@@ -653,7 +653,7 @@ export async function runChain(
           logger.warn({ chainId, step: i + 1, attempt: attempt + 1, agent: step.agent_id }, 'Retrying failed chain step');
           await reportToCoordinator(
             'main',
-            `🔁 Chain "${chainName}": повтор шага ${i + 1} (${step.agent_id}), попытка ${attempt + 1}`,
+            `🔁 Chain "${chainName}": retry step ${i + 1} (${step.agent_id}), attempt ${attempt + 1}`,
             'alert',
           );
         }
@@ -694,7 +694,7 @@ export async function runChain(
 
       await reportToCoordinator(
         'main',
-        `Chain "${chainName}" упала на шаге ${i + 1} (${step.agent_id}) после ${MAX_RETRIES + 1} попыток: ${errMsg.slice(0, 200)}`,
+        `Chain "${chainName}" failed at step ${i + 1} (${step.agent_id}) after ${MAX_RETRIES + 1} attempts: ${errMsg.slice(0, 200)}`,
         'alert',
       );
       throw lastErr;

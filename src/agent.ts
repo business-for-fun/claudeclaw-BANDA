@@ -36,18 +36,18 @@ export interface AgentProgressEvent {
 
 /** Map SDK tool names to Russian descriptive labels (what the bot is doing). */
 const TOOL_LABELS: Record<string, string> = {
-  Read: 'Читаю файл',
-  Write: 'Пишу файл',
-  Edit: 'Редактирую файл',
+  Read: 'Reading file',
+  Write: 'Writing file',
+  Edit: 'Editing file',
   Bash: 'Running command',
-  Grep: 'Ищу в коде',
-  Glob: 'Ищу файлы',
-  WebSearch: 'Ищу в интернете',
-  WebFetch: 'Загружаю страницу',
+  Grep: 'Searching code',
+  Glob: 'Finding files',
+  WebSearch: 'Searching web',
+  WebFetch: 'Fetching page',
   Agent: 'Running subtask',
-  NotebookEdit: 'Редактирую ноутбук',
-  AskUserQuestion: 'Готовлю вопрос',
-  Skill: 'Использую скилл',
+  NotebookEdit: 'Editing notebook',
+  AskUserQuestion: 'Preparing question',
+  Skill: 'Using skill',
   EnterPlanMode: 'Планирую',
   ExitPlanMode: 'План готов',
 };
@@ -297,7 +297,7 @@ export async function runAgent(
           onProgress({
             type: 'task_completed',
             description: status === 'failed'
-              ? `Подзадача не удалась: ${summary}`
+              ? `Subtask failed: ${summary}`
               : summary ? `Subtask completed: ${summary}` : 'Subtask completed',
           });
         }

@@ -624,6 +624,9 @@ export function searchMemories(
   // Strategy 1: Vector similarity search with recency boost + agent affinity
   if (queryEmbedding && queryEmbedding.length > 0) {
     const candidates = getMemoriesWithEmbeddings(chatId);
+    // Also include memories from all chats for cross-context awareness
+    const allChatCandidates = getMemoriesWithEmbeddings(null as any);
+    for (const m of allChatCandidates) { if (!candidates.find(c => c.id === m.id)) candidates.push(m); }
     if (candidates.length > 0) {
       const scored = candidates
         .filter(isVisible)

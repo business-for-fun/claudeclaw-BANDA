@@ -28,7 +28,10 @@ fi
 echo "Patches applied"
 
 # Patch: cross-chat memory search - include all chats, not just current
-if grep -q "const candidates = getMemoriesWithEmbeddings(chatId);" src/db.ts; then
+# 2026-08-29: guard on the ABSENCE of the patch marker, not the presence of
+# the anchor line — the anchor survives patching, so the old guard re-inserted
+# the block on every run (found doubled = a const-redeclaration compile error).
+if ! grep -q "allChatCandidates" src/db.ts && grep -q "const candidates = getMemoriesWithEmbeddings(chatId);" src/db.ts; then
   sed -i 's/const candidates = getMemoriesWithEmbeddings(chatId);/const candidates = getMemoriesWithEmbeddings(chatId);\n    \/\/ Also include memories from all chats for cross-context awareness\n    const allChatCandidates = getMemoriesWithEmbeddings(null as any);\n    for (const m of allChatCandidates) { if (!candidates.find(c => c.id === m.id)) candidates.push(m); }/' src/db.ts
 fi
 
@@ -99,11 +102,15 @@ sed -i "s/Готовлю вопрос/Preparing question/g" src/agent.ts
 sed -i "s/Использую скилл/Using skill/g" src/agent.ts
 
 # Patch: chain retry messages in orchestrator
+# 2026-08-29: replaced blanket word-level seds ('после'→'after', 'попытка'→
+# 'attempt', 'попыток'→'attempts') with phrase-anchored ones — the blanket
+# versions mangled unrelated Russian UI strings added later (e.g. the
+# auto-reset notification became "сброшена автоматически after задачи").
 sed -i 's/повтор шага/retry step/g' src/orchestrator.ts
-sed -i 's/попытка/attempt/g' src/orchestrator.ts
 sed -i 's/упала на шаге/failed at step/g' src/orchestrator.ts
-sed -i 's/после/after/g' src/orchestrator.ts
-sed -i 's/попыток/attempts/g' src/orchestrator.ts
+sed -i 's/, попытка ${attempt/, attempt ${attempt/g' src/orchestrator.ts
+sed -i 's/) после ${/) after ${/g' src/orchestrator.ts
+sed -i 's/ попыток`/ attempts`/g' src/orchestrator.ts
 
 # Patch: disable in-process fallback for other agents
 python3 -c "
@@ -144,3 +151,21 @@ python3 scripts/patches/r4g-debug-observer.py 2>/dev/null || true
 if grep -q "await api.sendChatAction(chatId, 'typing');" src/bot.ts; then
   sed -i "s/await api.sendChatAction(chatId, 'typing');/await api.sendChatAction(chatId, 'typing', undefined, AbortSignal.timeout(5000) as any);/" src/bot.ts
 fi
+
+# Patch: session auto-reset — two compounding bugs (2026-08-29), see commit
+# f218ee76. Without these the auto-reset safety net can never fire and every
+# oversized session ends in a silent hang needing manual /newchat.
+# (a) setSession INSERT OR REPLACE wiped baseline_tokens on every save.
+if grep -q "INSERT OR REPLACE INTO sessions" src/db.ts; then
+  python3 -c "
+content = open('src/db.ts').read()
+old = \"'INSERT OR REPLACE INTO sessions (chat_id, agent_id, session_id, updated_at) VALUES (?, ?, ?, ?)',\"
+new = '''\`INSERT INTO sessions (chat_id, agent_id, session_id, updated_at) VALUES (?, ?, ?, ?)
+     ON CONFLICT(chat_id, agent_id) DO UPDATE SET session_id = excluded.session_id, updated_at = excluded.updated_at\`,'''
+content = content.replace(old, new)
+open('src/db.ts', 'w').write(content)
+"
+fi
+# (b) context size must include cache-read tokens, not just fresh input.
+sed -i "s/const contextTokens = usage.lastCallInputTokens;/const contextTokens = usage.lastCallInputTokens + usage.lastCallCacheRead;/g" src/bot.ts
+sed -i "s/const contextTokens = usage.lastCallInputTokens ?? 0;/const contextTokens = (usage.lastCallInputTokens ?? 0) + (usage.lastCallCacheRead ?? 0);/" src/context-guard.ts
