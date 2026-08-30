@@ -152,6 +152,13 @@ if grep -q "await api.sendChatAction(chatId, 'typing');" src/bot.ts; then
   sed -i "s/await api.sendChatAction(chatId, 'typing');/await api.sendChatAction(chatId, 'typing', undefined, AbortSignal.timeout(5000) as any);/" src/bot.ts
 fi
 
+# Patch: dashboard /api/delegate default timeout 10min -> 90min (2026-08-30).
+# The 10-min clamp on the RECEIVING side killed any jest-length delegated task
+# at exactly 10:00 ("Agent query aborted") regardless of the caller's 90-min
+# defaults — root cause of Freddie/Olaf never reaching git commit 29.08.
+# Plain substitution — old string disappears, so this is naturally idempotent.
+sed -i 's/const timeoutMs = body.timeoutMs || 10 \* 60 \* 1000;/const timeoutMs = body.timeoutMs || 90 * 60 * 1000;/' src/dashboard.ts
+
 # Patch: session auto-reset — two compounding bugs (2026-08-29), see commit
 # f218ee76. Without these the auto-reset safety net can never fire and every
 # oversized session ends in a silent hang needing manual /newchat.

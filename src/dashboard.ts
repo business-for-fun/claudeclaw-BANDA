@@ -308,7 +308,7 @@ export function startDashboard(botApi?: Api<RawApi>, portOverride?: number): voi
 
       const chatId = body.chatId || ALLOWED_CHAT_ID.split(',')[0] || '';
       const fromAgent = body.fromAgent || AGENT_ID;
-      const timeoutMs = body.timeoutMs || 10 * 60 * 1000;
+      const timeoutMs = body.timeoutMs || 90 * 60 * 1000; // 2026-08-30: match DEFAULT_TIMEOUT_MS/delegate-to-agent.sh (was 10 min — killed any jest-length task at exactly 10:00)
 
       logger.info({ agentId: body.agentId, promptLen: body.prompt.length }, 'API delegation request');
 
@@ -359,7 +359,7 @@ export function startDashboard(botApi?: Api<RawApi>, portOverride?: number): voi
 
       const chatId = body.chatId || ALLOWED_CHAT_ID.split(',')[0] || '';
       const fromAgent = AGENT_ID;
-      const timeoutMs = body.timeoutMs || 10 * 60 * 1000;
+      const timeoutMs = body.timeoutMs || 90 * 60 * 1000; // 2026-08-30: match DEFAULT_TIMEOUT_MS/delegate-to-agent.sh (was 10 min — killed any jest-length task at exactly 10:00)
 
       logger.info(
         { agents: body.tasks.map((t) => t.agentId), count: body.tasks.length },
