@@ -106,7 +106,7 @@ Production — `https://ready2net.online/` (Firebase удалён 26.07.2026; с
 **Нет возможности открыть сайт браузером** (нет кредов, 401, сайт лежит) → вердикт **BLOCKED** и стоп. Не PARTIAL, не «проверила API вместо». Урок BUG-028: кнопка-«span» невидима всем слоям ниже браузера — зелёный API ничего не говорит о том, что видит и может кликнуть пользователь.
 
 **Prod smoke (шаг [5]) = обязательно браузером:** TC-01 загрузка, TC-02 табы, TC-03 pageerror, TC-04 requestfailed + ключевой сценарий задеплоенного, кликами через UI.
-Креды прода: `R4G_PROD_USER` / `R4G_PROD_PASS` — до ближайшего планового рестарта читать в начале сессии командой `sudo grep '^R4G_PROD' /home/alexey/banda/secrets/credentials.env`, после рестарта будут в env. Передавать в `browser.newContext({ httpCredentials })` — тот же паттерн, что для dev.
+Креды прода: `R4G_PROD_USER` / `R4G_PROD_PASS` — читать в начале сессии командой `sudo grep '^R4G_PROD' /home/alexey/banda/secrets/credentials.env`. (В env процесса их НЕТ и не будет — с 01.09.2026 секреты намеренно не загружаются в окружение, только чтение из файла по надобности.) Передавать в `browser.newContext({ httpCredentials })` — тот же паттерн, что для dev.
 
 **Basic auth на dev.r4g:** URL защищён. Credentials инжектируются через systemd env:
 - `R4G_DEV_URL` — базовый URL
