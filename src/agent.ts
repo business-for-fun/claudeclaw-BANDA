@@ -191,8 +191,13 @@ export async function runAgent(
         // Resume the previous session for this chat (persistent context)
         resume: sessionId,
 
-        // 'project' loads CLAUDE.md from cwd; 'user' loads ~/.claude/skills/ and user settings
-        settingSources: ['project', 'user'],
+        // 'project' loads CLAUDE.md from cwd. 'user' deliberately excluded
+        // (2026-09-01): the service runs as amileev, so 'user' injected the
+        // operator's personal ~/.claude/CLAUDE.md (host ops map, secrets
+        // paths) into every agent session — ~1.8K tokens of confusing,
+        // role-foreign context. User-scope plugins the fleet relies on
+        // (last30days for lalo) are enabled in .claude/settings.json instead.
+        settingSources: ['project'],
 
         // Skip all permission prompts — this is a trusted personal bot on your own machine
         permissionMode: 'bypassPermissions',

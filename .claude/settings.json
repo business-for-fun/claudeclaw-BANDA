@@ -1,0 +1,20 @@
+{
+  "enabledPlugins": {
+    "dev-browser@dev-browser-marketplace": true,
+    "last30days@last30days-skill": true,
+    "claude-mem@thedotmack": true,
+    "superpowers@superpowers-marketplace": true,
+    "ralph-loop@claude-plugins-official": true,
+    "hookify@claude-plugins-official": true,
+    "code-review@claude-plugins-official": true,
+    "pr-review-toolkit@claude-plugins-official": true,
+    "commit-commands@claude-plugins-official": true,
+    "plugin-dev@claude-plugins-official": true
+  },
+  "permissions": {
+    "allow": [
+      "Write(/home/alexey/banda/.claude/hookify.save-credentials.local.md)",
+      "Write(/home/alexey/banda/secrets/credentials.env)"
+    ]
+  }
+}

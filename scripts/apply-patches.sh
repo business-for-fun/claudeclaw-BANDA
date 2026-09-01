@@ -176,3 +176,30 @@ fi
 # (b) context size must include cache-read tokens, not just fresh input.
 sed -i "s/const contextTokens = usage.lastCallInputTokens;/const contextTokens = usage.lastCallInputTokens + usage.lastCallCacheRead;/g" src/bot.ts
 sed -i "s/const contextTokens = usage.lastCallInputTokens ?? 0;/const contextTokens = (usage.lastCallInputTokens ?? 0) + (usage.lastCallCacheRead ?? 0);/" src/context-guard.ts
+
+# Patch: exclude 'user' from settingSources (2026-09-01). The services run as
+# amileev, so the 'user' scope injected the operator's personal
+# ~/.claude/CLAUDE.md (host ops map, secrets paths) into EVERY agent session
+# (~1.8K tokens of role-foreign context). Fleet-needed user-scope plugins
+# (last30days for lalo) are enabled in .claude/settings.json (project scope,
+# a banda-local file untouched by vendor pulls). Old string disappears — idempotent.
+sed -i "s/settingSources: \['project', 'user'\],/settingSources: ['project'],/" src/agent.ts
+
+# Patch: do not pass systemPrompt for sub-agents (2026-09-01). Their CLAUDE.md
+# loads via settingSources:['project'] from cwd anyway — passing it duplicated
+# the file (~5-7K tokens/session) and replaced the SDK default system prompt.
+# Guard: absence of the patch marker comment; anchor line survives, marker doesn't.
+python3 -c "
+content = open('src/index.ts').read()
+if 'systemPrompt deliberately NOT passed for sub-agents' not in content:
+    old = '''    obsidian: agentConfig.obsidian,
+    systemPrompt,
+  });'''
+    new = '''    obsidian: agentConfig.obsidian,
+    // systemPrompt deliberately NOT passed for sub-agents (2026-09-01): the
+    // agent's own CLAUDE.md already loads via settingSources:['project'] from
+    // its cwd — see vault gotcha 01.09.
+  });'''
+    content = content.replace(old, new)
+    open('src/index.ts', 'w').write(content)
+" 2>/dev/null || true

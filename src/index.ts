@@ -41,7 +41,10 @@ if (AGENT_ID !== 'main') {
     cwd: agentDir,
     model: agentConfig.model,
     obsidian: agentConfig.obsidian,
-    systemPrompt,
+    // systemPrompt deliberately NOT passed for sub-agents (2026-09-01): the
+    // agent's own CLAUDE.md already loads via settingSources:['project'] from
+    // its cwd — passing it here too duplicated the whole file in every session
+    // and replaced the SDK's default system prompt. See vault gotcha 01.09.
   });
   logger.info({ agentId: AGENT_ID, name: agentConfig.name }, 'Running as agent');
 } else {
