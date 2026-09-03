@@ -182,24 +182,50 @@ commit_workflows() {
   local git_root
   git_root=$(cd "$dir" && git rev-parse --show-toplevel 2>/dev/null) || git_root="$PROJECT_ROOT"
 
+  # NOTE (2026-09-03, BUG found by Gale, fixed by Olaf): $dir is the LOGICAL
+  # path (e.g. /home/alexey/banda/projects/r4g/workflows, reached through a
+  # bind mount), while `git rev-parse --show-toplevel` resolves symlinks and
+  # returns the PHYSICAL path (/home/alexey/openclaw-workspaces/shared/...).
+  # os.path.relpath() on the raw logical $dir against the physical $git_root
+  # produced garbage like "../../../../banda/projects/r4g/workflows", which
+  # made every `git status`/`git add` below silently fail as "outside
+  # repository" (swallowed by 2>/dev/null || true) — the script reported
+  # "no changes" every single run since 2026-07-26, for every project, while
+  # workflow JSON kept drifting from git HEAD uncommitted. Fix: resolve $dir
+  # to its physical path FIRST, then take relpath against $git_root (also
+  # physical) — the two now agree. Stopped swallowing git status's stderr so
+  # a real "outside repository" failure is visible in the log instead of
+  # looking identical to "no changes".
+  local dir_real
+  dir_real=$(realpath "$dir")
+
   local rel_path
-  rel_path=$(python3 -c "import os; print(os.path.relpath('$dir', '$git_root'))")
+  rel_path=$(python3 -c "import os; print(os.path.relpath('$dir_real', '$git_root'))")
 
   cd "$git_root"
 
-  local changed
-  changed=$(git status --porcelain "$rel_path" 2>/dev/null || true)
+  local changed status_err
+  status_err=$(mktemp)
+  if ! changed=$(git status --porcelain "$rel_path" 2>"$status_err"); then
+    log "Git ($label): ERROR git status failed: $(cat "$status_err")"
+    rm -f "$status_err"
+    return
+  fi
+  rm -f "$status_err"
 
   if [ -n "$changed" ]; then
     local count
     count=$(echo "$changed" | wc -l | tr -d ' ')
     log "Git ($label): $count workflow file(s) changed in $git_root"
 
-    git add "$rel_path" 2>/dev/null || true
+    if ! git add "$rel_path" 2>&1; then
+      log "Git ($label): ERROR git add failed"
+      return
+    fi
     git commit -m "backup: $label n8n workflows export $(date '+%Y-%m-%d %H:%M UTC')
 
 Auto-exported $count workflow(s) from n8n servers.
-" 2>/dev/null || log "Git ($label): commit failed (permissions or no changes)"
+" || log "Git ($label): commit failed (permissions or no changes)"
   else
     log "Git ($label): no changes"
   fi
