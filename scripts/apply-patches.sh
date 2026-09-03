@@ -265,3 +265,42 @@ function runQueuedSelfDelegation<T>(fn: () => Promise<T>): Promise<T> {
     else:
         print('WARNING: self-delegation queue anchors not found — vendor code changed, patch skipped')
 PYEOF
+
+# Patch: inject Telegram reply/quote context into the agent prompt (2026-09-03).
+# "Quote and Reply" carries replied-to text + quote as metadata; without this
+# the agent gets a bare follow-up ("опиши, что это") with no referent.
+# Guard: absence of the patch marker variable name.
+python3 - << 'PYEOF'
+content = open('src/bot.ts').read()
+if 'replyContext' not in content:
+    old = """    const senderName = ctx.from?.first_name || ctx.from?.username || 'Unknown';
+    const senderUsername = ctx.from?.username ? `@${ctx.from.username}` : '';
+    let enrichedText = isGroup
+      ? `[From: ${senderName} ${senderUsername}] ${text}`
+      : text;"""
+    new = """    const senderName = ctx.from?.first_name || ctx.from?.username || 'Unknown';
+    const senderUsername = ctx.from?.username ? `@${ctx.from.username}` : '';
+    // Reply/quote context (2026-09-03): see vault gotcha.
+    let replyContext = '';
+    {
+      const rep = ctx.message?.reply_to_message;
+      const quoted = (ctx.message as { quote?: { text?: string } })?.quote?.text
+        || rep?.text || rep?.caption;
+      if (quoted) {
+        const repFrom = rep?.from?.id === ctx.me?.id
+          ? 'your earlier message'
+          : (rep?.from?.first_name || rep?.from?.username || 'another message');
+        const clipped = quoted.length > 1500 ? `${quoted.slice(0, 1500)}…` : quoted;
+        replyContext = `[In reply to ${repFrom}: «${clipped}»]\\n`;
+      }
+    }
+    let enrichedText = isGroup
+      ? `${replyContext}[From: ${senderName} ${senderUsername}] ${text}`
+      : `${replyContext}${text}`;"""
+    if old in content:
+        content = content.replace(old, new)
+        open('src/bot.ts', 'w').write(content)
+        print('Reply-context patch applied')
+    else:
+        print('WARNING: reply-context anchor not found — vendor code changed, patch skipped')
+PYEOF

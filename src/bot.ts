@@ -1372,9 +1372,27 @@ export function createBot(): Bot {
 
     const senderName = ctx.from?.first_name || ctx.from?.username || 'Unknown';
     const senderUsername = ctx.from?.username ? `@${ctx.from.username}` : '';
+    // Reply/quote context (2026-09-03): Telegram "Reply" / "Quote and Reply"
+    // carries the replied-to message and the selected quote as metadata —
+    // without injecting it the agent sees a bare "опиши, что это" and has no
+    // idea what "это" is (it then guesses "attachment lost", which is wrong:
+    // a quote block is UI styling, not an attachment).
+    let replyContext = '';
+    {
+      const rep = ctx.message?.reply_to_message;
+      const quoted = (ctx.message as { quote?: { text?: string } })?.quote?.text
+        || rep?.text || rep?.caption;
+      if (quoted) {
+        const repFrom = rep?.from?.id === ctx.me?.id
+          ? 'your earlier message'
+          : (rep?.from?.first_name || rep?.from?.username || 'another message');
+        const clipped = quoted.length > 1500 ? `${quoted.slice(0, 1500)}…` : quoted;
+        replyContext = `[In reply to ${repFrom}: «${clipped}»]\n`;
+      }
+    }
     let enrichedText = isGroup
-      ? `[From: ${senderName} ${senderUsername}] ${text}`
-      : text;
+      ? `${replyContext}[From: ${senderName} ${senderUsername}] ${text}`
+      : `${replyContext}${text}`;
     // R4G_Debug: inject recent group_observe context so agent sees chat history
 if (chatIdStr === '-1003759375768') {
   try {
