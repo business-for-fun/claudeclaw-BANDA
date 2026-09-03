@@ -12,6 +12,21 @@ import { boardAddTask, boardCompleteTask, boardFailTask } from './task-board.js'
 import { maybeAutoResetAfterDelegation } from './context-guard.js';
 import { notifyCoordinator } from './coordinator-notify.js';
 
+// ── Self-delegation FIFO queue (2026-09-03) ──────────────────────────
+// Two concurrent delegations in one agent process stack their memory
+// profiles (a full jest run + a second claude subprocess) and OOM the
+// agent's cgroup — gale 02.09 19:31 and kim 02.09 16:25 died exactly
+// this way. One in-process task at a time; the next starts when the
+// previous settles. The waiting task's abort timer starts only once it
+// actually runs (see call site), so queue wait does not consume its
+// timeout budget.
+let selfDelegationChain: Promise<void> = Promise.resolve();
+function runQueuedSelfDelegation<T>(fn: () => Promise<T>): Promise<T> {
+  const p = selfDelegationChain.then(fn);
+  selfDelegationChain = p.then(() => undefined, () => undefined);
+  return p;
+}
+
 // ── Remote delegation (agent's own dashboard API) ────────────────────
 
 interface RemoteDelegationResult {
@@ -361,24 +376,30 @@ export async function delegateToAgent(
       ? `[Agent role — follow these instructions]\n${systemPrompt}\n[End agent role]\n\n${prompt}`
       : prompt;
 
-    // Create an AbortController with timeout
-    const abortCtrl = new AbortController();
-    const timer = setTimeout(() => abortCtrl.abort(), timeoutMs);
-
     // Use persistent session when agent runs in its own process (AGENT_ID === agentId)
     // This lets the agent remember delegated tasks when user talks to it via Telegram
     const isSelfProcess = AGENT_ID === agentId;
-    const existingSessionId = isSelfProcess && chatId ? getSession(chatId, agentId) : undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
 
     try {
-      const result = await runAgent(
-        fullPrompt,
-        existingSessionId, // resume session if agent's own process, fresh otherwise
-        () => {}, // no typing indicator needed for sub-delegation
-        undefined, // no progress callback for inner agent
-        agentConfig.model, // use agent's model from agent.yaml (e.g. haiku for Tuco)
-        abortCtrl,
-      );
+      // FIFO: one in-process delegation at a time (runQueuedSelfDelegation).
+      // AbortController, timeout timer and session lookup live INSIDE the
+      // queued section: the timeout budget starts when the task actually
+      // runs, and the session id reflects any auto-reset done by the
+      // previous task.
+      const result = await runQueuedSelfDelegation(async () => {
+        const abortCtrl = new AbortController();
+        timer = setTimeout(() => abortCtrl.abort(), timeoutMs);
+        const existingSessionId = isSelfProcess && chatId ? getSession(chatId, agentId) : undefined;
+        return runAgent(
+          fullPrompt,
+          existingSessionId, // resume session if agent's own process, fresh otherwise
+          () => {}, // no typing indicator needed for sub-delegation
+          undefined, // no progress callback for inner agent
+          agentConfig.model, // use agent's model from agent.yaml (e.g. haiku for Tuco)
+          abortCtrl,
+        );
+      });
 
       clearTimeout(timer);
       clearInterval(progressTimer);

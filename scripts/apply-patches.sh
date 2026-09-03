@@ -203,3 +203,65 @@ if 'systemPrompt deliberately NOT passed for sub-agents' not in content:
     content = content.replace(old, new)
     open('src/index.ts', 'w').write(content)
 " 2>/dev/null || true
+
+# Patch: FIFO queue for in-process (self-)delegations (2026-09-03).
+# Two concurrent delegations in one agent process stack memory profiles
+# (full jest + a second claude subprocess) and OOM the cgroup (gale 02.09
+# 19:31, kim 02.09 16:25). Guard: absence of the patch marker function name.
+python3 - << 'PYEOF'
+content = open('src/orchestrator.ts').read()
+if 'runQueuedSelfDelegation' not in content:
+    old_import = """import { notifyCoordinator } from './coordinator-notify.js';
+"""
+    new_import = old_import + """
+// Self-delegation FIFO queue (2026-09-03): one in-process task at a time.
+let selfDelegationChain: Promise<void> = Promise.resolve();
+function runQueuedSelfDelegation<T>(fn: () => Promise<T>): Promise<T> {
+  const p = selfDelegationChain.then(fn);
+  selfDelegationChain = p.then(() => undefined, () => undefined);
+  return p;
+}
+"""
+    old_run = """    // Create an AbortController with timeout
+    const abortCtrl = new AbortController();
+    const timer = setTimeout(() => abortCtrl.abort(), timeoutMs);
+
+    // Use persistent session when agent runs in its own process (AGENT_ID === agentId)
+    // This lets the agent remember delegated tasks when user talks to it via Telegram
+    const isSelfProcess = AGENT_ID === agentId;
+    const existingSessionId = isSelfProcess && chatId ? getSession(chatId, agentId) : undefined;
+
+    try {
+      const result = await runAgent(
+        fullPrompt,
+        existingSessionId, // resume session if agent's own process, fresh otherwise
+        () => {}, // no typing indicator needed for sub-delegation
+        undefined, // no progress callback for inner agent
+        agentConfig.model, // use agent's model from agent.yaml (e.g. haiku for Tuco)
+        abortCtrl,
+      );"""
+    new_run = """    // Use persistent session when agent runs in its own process (AGENT_ID === agentId)
+    const isSelfProcess = AGENT_ID === agentId;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    try {
+      const result = await runQueuedSelfDelegation(async () => {
+        const abortCtrl = new AbortController();
+        timer = setTimeout(() => abortCtrl.abort(), timeoutMs);
+        const existingSessionId = isSelfProcess && chatId ? getSession(chatId, agentId) : undefined;
+        return runAgent(
+          fullPrompt,
+          existingSessionId,
+          () => {},
+          undefined,
+          agentConfig.model,
+          abortCtrl,
+        );
+      });"""
+    if old_import in content and old_run in content:
+        content = content.replace(old_import, new_import).replace(old_run, new_run)
+        open('src/orchestrator.ts', 'w').write(content)
+        print('Self-delegation queue patch applied')
+    else:
+        print('WARNING: self-delegation queue anchors not found — vendor code changed, patch skipped')
+PYEOF
