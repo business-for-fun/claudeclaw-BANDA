@@ -98,6 +98,15 @@ if [ "${1:-}" = "--parallel" ]; then
   # Long tasks (builds, deploys, tests) MUST pass run_in_background=true to
   # the orchestrator. Sync callers that hit this default will block for 90 min.
   TIMEOUT_MS="${3:-5400000}"
+# 2026-09-04: floor tiny explicit timeouts. 600000 = 10 MINUTES (not 60!) —
+# Nacho kept passing it, every heavy delegation died at exactly 10:00 with an
+# empty result, and the Empty-response protocol then demanded a pointless
+# /newchat. A timeout is a ceiling: flooring it never slows a fast task.
+MIN_TIMEOUT_MS=1800000
+if [ "$TIMEOUT_MS" -lt "$MIN_TIMEOUT_MS" ]; then
+  echo "WARN: timeoutMs=$TIMEOUT_MS is below the 30-min floor (600000 = 10 minutes, not 60). Raised to $MIN_TIMEOUT_MS." >&2
+  TIMEOUT_MS=$MIN_TIMEOUT_MS
+fi
 
   if [ -z "$TASKS_JSON" ]; then
     echo "Usage: delegate-to-agent.sh --parallel '<json_tasks>' [timeout_ms]" >&2
@@ -141,6 +150,15 @@ AGENT_ID="${1:-}"
 PROMPT="${2:-}"
 # NOTE: 90-min default — long tasks MUST use run_in_background=true (see CLAUDE.md).
 TIMEOUT_MS="${3:-5400000}"
+# 2026-09-04: floor tiny explicit timeouts. 600000 = 10 MINUTES (not 60!) —
+# Nacho kept passing it, every heavy delegation died at exactly 10:00 with an
+# empty result, and the Empty-response protocol then demanded a pointless
+# /newchat. A timeout is a ceiling: flooring it never slows a fast task.
+MIN_TIMEOUT_MS=1800000
+if [ "$TIMEOUT_MS" -lt "$MIN_TIMEOUT_MS" ]; then
+  echo "WARN: timeoutMs=$TIMEOUT_MS is below the 30-min floor (600000 = 10 minutes, not 60). Raised to $MIN_TIMEOUT_MS." >&2
+  TIMEOUT_MS=$MIN_TIMEOUT_MS
+fi
 
 if [ -z "$AGENT_ID" ] || [ -z "$PROMPT" ]; then
   echo "Usage: delegate-to-agent.sh <agent_id> \"prompt\" [timeout_ms]" >&2

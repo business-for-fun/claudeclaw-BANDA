@@ -356,3 +356,21 @@ if 'sessionRecovered' not in bot:
     else:
         print('WARNING: dead-session notice anchor not found in bot.ts — patch skipped')
 PYEOF
+
+# Patch: 30-min floor for explicit delegation timeouts (2026-09-04).
+# 600000 = 10 minutes, not 60 — Nacho kept passing it as arg 3; every heavy
+# delegation aborted at exactly 10:00 with an empty result, triggering bogus
+# /newchat requests. Guard: absence of the MIN_TIMEOUT_MS marker.
+python3 - << 'PYEOF'
+s = open('scripts/delegate-to-agent.sh').read()
+if 'MIN_TIMEOUT_MS' not in s and 'TIMEOUT_MS="${3:-5400000}"' in s:
+    guard = '''TIMEOUT_MS="${3:-5400000}"
+MIN_TIMEOUT_MS=1800000
+if [ "$TIMEOUT_MS" -lt "$MIN_TIMEOUT_MS" ]; then
+  echo "WARN: timeoutMs=$TIMEOUT_MS is below the 30-min floor (600000 = 10 minutes, not 60). Raised to $MIN_TIMEOUT_MS." >&2
+  TIMEOUT_MS=$MIN_TIMEOUT_MS
+fi'''
+    s = s.replace('TIMEOUT_MS="${3:-5400000}"', guard)
+    open('scripts/delegate-to-agent.sh','w').write(s)
+    print('Timeout floor patch applied')
+PYEOF
