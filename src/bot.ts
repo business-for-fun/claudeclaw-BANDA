@@ -620,6 +620,11 @@ async function handleMessage(ctx: Context, message: MessageContent, forceVoiceRe
     if (result.newSessionId) {
       setSession(chatIdStr, result.newSessionId, AGENT_ID);
       logger.info({ newSessionId: result.newSessionId }, 'Session saved');
+      // 2026-09-04: dead session pointer was auto-healed (see agent.ts) —
+      // tell the chat once, in the same style as the auto-reset notice.
+      if (result.sessionRecovered) {
+        void ctx.reply('🔄 Прошлая сессия этого чата была утеряна (ротация истории) — начал свежую автоматически. Память, карточки и resume-state не затронуты.').catch(() => {});
+      }
     }
 
     const rawResponse = result.text?.trim() || 'Done.';

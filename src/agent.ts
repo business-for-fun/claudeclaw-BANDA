@@ -93,6 +93,8 @@ export interface AgentResult {
   newSessionId: string | undefined;
   usage: UsageInfo | null;
   aborted?: boolean;
+  /** Set when a dead session pointer was auto-healed by retrying fresh (2026-09-04). */
+  sessionRecovered?: boolean;
 }
 
 /**
@@ -347,6 +349,19 @@ export async function runAgent(
     if (abortController?.signal.aborted) {
       logger.info('Agent query aborted by user');
       return { text: null, newSessionId, usage, aborted: true };
+    }
+    // 2026-09-04: dead session pointer — Claude Code rotates transcripts
+    // (~30 days) while the sessions table still references them, so resume
+    // fails deterministically ("No conversation found with session ID").
+    // Self-heal: retry ONCE with a fresh session (sessionId=undefined makes
+    // recursion terminal). The caller then saves result.newSessionId, which
+    // overwrites the dead pointer in the DB. Fleet-wide sweep found 34 such
+    // rows on 04.09 — this closes the class permanently.
+    const errMsg = err instanceof Error ? err.message : String(err);
+    if (sessionId && /No conversation found with session ID/i.test(errMsg)) {
+      logger.warn({ sessionId }, 'Dead session pointer (transcript rotated away) — retrying with a fresh session');
+      const fresh = await runAgent(message, undefined, onTyping, onProgress, model, abortController);
+      return { ...fresh, sessionRecovered: true };
     }
     throw err;
   } finally {

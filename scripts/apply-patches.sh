@@ -304,3 +304,55 @@ if 'replyContext' not in content:
     else:
         print('WARNING: reply-context anchor not found — vendor code changed, patch skipped')
 PYEOF
+
+# Patch: self-heal dead session pointers (2026-09-04). Claude Code rotates
+# transcripts (~30 days) while the sessions table still references them —
+# resume then fails "No conversation found with session ID" (34 dead rows
+# swept fleet-wide 04.09). Retry once fresh; caller saves newSessionId which
+# overwrites the dead row. Guard: absence of the marker 'sessionRecovered'.
+python3 - << 'PYEOF'
+content = open('src/agent.ts').read()
+if 'sessionRecovered' not in content:
+    old_iface = """  aborted?: boolean;
+}"""
+    new_iface = """  aborted?: boolean;
+  sessionRecovered?: boolean;
+}"""
+    old_catch = """    if (abortController?.signal.aborted) {
+      logger.info('Agent query aborted by user');
+      return { text: null, newSessionId, usage, aborted: true };
+    }
+    throw err;"""
+    new_catch = """    if (abortController?.signal.aborted) {
+      logger.info('Agent query aborted by user');
+      return { text: null, newSessionId, usage, aborted: true };
+    }
+    const errMsg = err instanceof Error ? err.message : String(err);
+    if (sessionId && /No conversation found with session ID/i.test(errMsg)) {
+      logger.warn({ sessionId }, 'Dead session pointer (transcript rotated away) — retrying with a fresh session');
+      const fresh = await runAgent(message, undefined, onTyping, onProgress, model, abortController);
+      return { ...fresh, sessionRecovered: true };
+    }
+    throw err;"""
+    if old_iface in content and old_catch in content:
+        content = content.replace(old_iface, new_iface, 1).replace(old_catch, new_catch, 1)
+        open('src/agent.ts', 'w').write(content)
+        print('Dead-session self-heal patch applied (agent.ts)')
+    else:
+        print('WARNING: dead-session anchors not found in agent.ts — vendor changed, patch skipped')
+
+bot = open('src/bot.ts').read()
+if 'sessionRecovered' not in bot:
+    old_save = """      setSession(chatIdStr, result.newSessionId, AGENT_ID);
+      logger.info({ newSessionId: result.newSessionId }, 'Session saved');"""
+    new_save = """      setSession(chatIdStr, result.newSessionId, AGENT_ID);
+      logger.info({ newSessionId: result.newSessionId }, 'Session saved');
+      if (result.sessionRecovered) {
+        void ctx.reply('🔄 Прошлая сессия этого чата была утеряна (ротация истории) — начал свежую автоматически. Память, карточки и resume-state не затронуты.').catch(() => {});
+      }"""
+    if old_save in bot:
+        open('src/bot.ts', 'w').write(bot.replace(old_save, new_save, 1))
+        print('Dead-session notice patch applied (bot.ts)')
+    else:
+        print('WARNING: dead-session notice anchor not found in bot.ts — patch skipped')
+PYEOF
