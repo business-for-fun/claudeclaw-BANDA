@@ -109,7 +109,9 @@ MAP=(
   "jB6MiQjZHihD60pf|Return Stored Prices|$R4G_DIR/hub_prices_get.js"
   "jB6MiQjZHihD60pf|Parse CSV and Extract Prices (Manual)|$R4G_DIR/hub_prices_parse_csv_manual.js"
   "pXoEwtpYF3q5MklB|Parse History Query|$R4G_DIR/inet_parse_history_query.js"
-  "Kt71Tsx9cPLTns57|Fetch iNet Data|$R4G_DIR/admin_financials_fetch_inet_data.js"
+  # BUG-20260905-016 renamed this node: it no longer fetches anything, it states
+  # the request. Old entry was "Fetch iNet Data|admin_financials_fetch_inet_data.js".
+  "Kt71Tsx9cPLTns57|Prepare iNet Request|$R4G_DIR/admin_financials_prepare_inet_request.js"
   "NAPvI3oGvRxRabkt|Parse POST iNet Credits|$R4G_DIR/inet_credits_parse_post.js"
   "NAPvI3oGvRxRabkt|Parse GET iNet Credits|$R4G_DIR/inet_credits_parse_get.js"
 
@@ -171,6 +173,28 @@ MAP=(
   "pXoEwtpYF3q5MklB|Envelope: iNet Credits|$R4G_DIR/service_call_inet_credits.js"
   "pXoEwtpYF3q5MklB|Envelope: Record iNet Round|$R4G_DIR/service_call_record_inet_round.js"
   "R5LHPUynalETS74X|Envelope: Record Ext Round|$R4G_DIR/service_call_record_ext_round.js"
+
+  # ── BUG-20260905-016: the Financials tab's iNet figures. The caller's new glue
+  # nodes, and — in the callee — a sub-workflow chain of its OWN.
+  #
+  # The chain duplicates three nodes of the webhook path (gate, parse, compute)
+  # because an Execute Workflow node returns `runData[lastNodeExecuted].data.main`:
+  # entering the shared graph, which forks into two possible last nodes, put the
+  # answer on an output slot the caller was not wired to and returned an empty
+  # body (rolled back 2026-09-05). A private single-leaf chain settles the slot
+  # structurally.
+  #
+  # Duplicated code is exactly what this script exists to police, so BOTH copies
+  # are listed against the SAME file. The sync script writes them from that file
+  # every run; these two lines are what notices if someone edits one of them in
+  # the n8n editor. ──
+  "Kt71Tsx9cPLTns57|Attach Service Token: iNet Stats|$R4G_DIR/service_token_attach.js"
+  "Kt71Tsx9cPLTns57|Envelope: iNet Stats|$R4G_DIR/service_call_inet_stats.js"
+  "Kt71Tsx9cPLTns57|Inject iNet Data|$R4G_DIR/admin_financials_inject_inet_data.js"
+  "pXoEwtpYF3q5MklB|Auth Gate: Sub-Call iNet Stats|$R4G_DIR/auth_gate.js"
+  "pXoEwtpYF3q5MklB|Parse Stats Query (Sub-Call)|$R4G_DIR/parse_stats_query.js"
+  "pXoEwtpYF3q5MklB|Compute iNet Stats (Sub-Call)|$R4G_DIR/internal_netting_v1.js"
+  "pXoEwtpYF3q5MklB|Return: iNet Stats|$R4G_DIR/inet_stats_subcall_return.js"
 )
 
 TMP="$(mktemp -d)"
