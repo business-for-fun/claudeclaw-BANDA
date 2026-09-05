@@ -132,6 +132,45 @@ MAP=(
   "JRld7fH2T4iMHHKB|Auth Gate: Get Netting Log|$R4G_DIR/auth_gate.js"
   "JRld7fH2T4iMHHKB|Auth Gate: Register Callback|$R4G_DIR/auth_gate.js"
   "AibeoQC5WwY5mmN7|Auth Gate: Store Broker Credits|$R4G_DIR/auth_gate.js"
+
+  # ── FEAT-20260811-013 precondition 4 (Olaf, 2026-08-13): auth_gate.js
+  # added in front of the two receiving webhooks the internal service calls
+  # actually target — r4g/admin-financials and r4g/inet-credits had NO gate
+  # at all before this. Real workflow IDs, NOT the same-named "[dev]" copies
+  # (Kt71Tsx9cPLTns57 / NAPvI3oGvRxRabkt vs K96ncs9UbN3q1drd / xY5R8eL9DrWEqqjg
+  # — confirmed by actual webhook path, not by name). ──
+  "Kt71Tsx9cPLTns57|Auth Gate: Fetch iNet Data|$R4G_DIR/auth_gate.js"
+  "NAPvI3oGvRxRabkt|Auth Gate: Parse POST iNet Credits|$R4G_DIR/auth_gate.js"
+  "NAPvI3oGvRxRabkt|Auth Gate: Parse GET iNet Credits|$R4G_DIR/auth_gate.js"
+
+  # ── FEAT-20260811-013 precondition 4, v2 (Olaf, 2026-08-13): service-token.json
+  # file pattern replaced process.env (Code nodes can't see it in this n8n —
+  # separate process, N8N_BLOCK_ENV_ACCESS_IN_NODE defaults true). New Code node
+  # service_token_attach.js sits before each of the 3 internal HTTP callers and
+  # leaves a minute-scoped proof on the item for the x-service-proof header. ──
+  "pXoEwtpYF3q5MklB|Attach Service Token: Fetch iNet Credits|$R4G_DIR/service_token_attach.js"
+  "pXoEwtpYF3q5MklB|Attach Service Token: Record iNet Round to Financials|$R4G_DIR/service_token_attach.js"
+  "R5LHPUynalETS74X|Attach Service Token: Record Ext Round to Financials|$R4G_DIR/service_token_attach.js"
+
+  # ── TASK-20260813-006 (Olaf, 2026-08-13): R4G_InternalNetting_v1 was the only
+  # active workflow with NO Auth Gate at all — launchedBy (FEAT-20260811-015)
+  # was always null and FEAT-20260811-010 role filtering never activated because
+  # nothing upstream resolved a session into __identity for this workflow. Pure
+  # topology: gate inserted between each of the 3 webhooks and its own parser. ──
+  "pXoEwtpYF3q5MklB|Auth Gate: Parse Webhook Input|$R4G_DIR/auth_gate.js"
+  "pXoEwtpYF3q5MklB|Auth Gate: Parse History Query|$R4G_DIR/auth_gate.js"
+  "pXoEwtpYF3q5MklB|Auth Gate: Parse Stats Query|$R4G_DIR/auth_gate.js"
+
+  # ── TASK-20260905-006 (Olaf, 2026-09-05): self-call httpRequest→localhost
+  # nodes replaced by native Execute Workflow. The removed httpRequest nodes
+  # ("Fetch iNet Credits", "Record iNet Round to Financials", "Record Ext
+  # Round to Financials") never had jsCode and were never in this MAP; the
+  # new Execute/Trigger nodes are executeWorkflow(Trigger) type, not .code,
+  # so they're not diffable here either — only the new envelope Code nodes
+  # need an entry. ──
+  "pXoEwtpYF3q5MklB|Envelope: iNet Credits|$R4G_DIR/service_call_inet_credits.js"
+  "pXoEwtpYF3q5MklB|Envelope: Record iNet Round|$R4G_DIR/service_call_record_inet_round.js"
+  "R5LHPUynalETS74X|Envelope: Record Ext Round|$R4G_DIR/service_call_record_ext_round.js"
 )
 
 TMP="$(mktemp -d)"
