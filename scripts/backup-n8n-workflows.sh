@@ -96,13 +96,71 @@ export_from_server() {
 
   log "Fetching workflows from $label ($host)..."
 
+  # TASK-20260905-007 (Olaf, 2026-09-05): n8n's /api/v1/workflows is paginated
+  # (default page size 100, more pages signalled via `nextCursor`). This used
+  # to be a single unconditional curl call with no `limit`/`cursor` handling
+  # at all — any server with >100 live workflows silently lost everything
+  # past the first page, forever, with no error (found by Gale on r4g:
+  # 121 live workflows, 21 never backed up, including 2 dev workflows from
+  # the TASK-006 iNet/Financials chain). Fix: follow `nextCursor` in a loop,
+  # merging each page's `data` array before handing off to the existing
+  # validate/count/export logic below (which is unchanged and still expects
+  # a single {"data": [...]} response — this loop just builds that).
   local response
-  response=$(curl -s --connect-timeout 10 --max-time 30 \
-    -H "X-N8N-API-KEY: $api_key" \
-    "$host/api/v1/workflows" 2>/dev/null) || {
-    log "ERROR: Cannot reach $label at $host"
-    return
-  }
+  local pages_file
+  pages_file=$(mktemp)
+  local cursor=""
+  local page_num=0
+
+  while true; do
+    page_num=$((page_num + 1))
+    local url="$host/api/v1/workflows?limit=100"
+    if [ -n "$cursor" ]; then
+      url="${url}&cursor=${cursor}"
+    fi
+
+    local page_json
+    page_json=$(curl -s --connect-timeout 10 --max-time 30 \
+      -H "X-N8N-API-KEY: $api_key" \
+      "$url" 2>/dev/null) || {
+      log "ERROR: Cannot reach $label at $host (page $page_num)"
+      rm -f "$pages_file"
+      return
+    }
+
+    if ! echo "$page_json" | python3 -c "import sys,json; json.load(sys.stdin)" 2>/dev/null; then
+      log "ERROR: Invalid JSON response from $label (page $page_num)"
+      rm -f "$pages_file"
+      return
+    fi
+
+    echo "$page_json" >> "$pages_file"
+
+    local page_count
+    page_count=$(echo "$page_json" | python3 -c "import sys,json; print(len(json.load(sys.stdin).get('data',[])))")
+    cursor=$(echo "$page_json" | python3 -c "import sys,json; c=json.load(sys.stdin).get('nextCursor'); print(c if c else '')")
+    log "  $label: page $page_num fetched ($page_count workflows)$([ -n "$cursor" ] && echo ", more pages pending" || echo ", last page")"
+
+    if [ -z "$cursor" ]; then
+      break
+    fi
+  done
+
+  # Merge all pages' `data` arrays into one combined response, same shape
+  # the rest of this function already expects.
+  response=$(python3 -c "
+import json
+items = []
+with open('$pages_file') as f:
+    for line in f:
+        line = line.strip()
+        if not line:
+            continue
+        page = json.loads(line)
+        items.extend(page.get('data', []))
+print(json.dumps({'data': items}))
+")
+  rm -f "$pages_file"
 
   # Validate JSON
   if ! echo "$response" | python3 -c "import sys,json; json.load(sys.stdin)" 2>/dev/null; then
