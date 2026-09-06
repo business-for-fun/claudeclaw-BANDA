@@ -92,7 +92,7 @@ docker compose -f <compose-file> restart <service>
 ## SSH to VMs
 ```bash
 ssh -o BatchMode=yes -i ~/.ssh/openclaw_ops_ed25519 amileev@10.128.0.5 '<command>'  # r4g
-ssh -o BatchMode=yes ubuntu@10.128.0.7 '<command>'  # limo
+ssh -o BatchMode=yes -i ~/.ssh/openclaw_ops_ed25519 amileev@10.128.0.7 '<command>'  # limo
 ssh -o BatchMode=yes amileev@10.128.0.3 '<command>' # fam
 ```
 ⚠️ **r4g корректирован 2026-08-06 (BUG-20260806-005 follow-up):** `ubuntu@10.128.0.5`
@@ -174,6 +174,7 @@ R4G backend = JS внутри Code-нод n8n на `10.128.0.5:5678`. Файлы
 2. `GET /api/v1/workflows/{id}` → найти Code-ноду → заменить `jsCode` содержимым репо-файла → `PUT` весь workflow обратно. Активный ML workflow: `R4G_ML_State_v1_FIXED` (id `keQOweGX4eAkLyUc`); карта нод: `Code: ML Accept FIXED` ← `ml_accept_fix.js`, `Code: ML Price Proposal` ← `ml_price_proposal.js`, `Code: Get ML State FIXED` ← `ml_state_fix.js`, `Code: ML Start` ← `ml_start_fix.js`, `Code: ML Stop` ← `ml_stop_fix.js`.
 3. **Верификация обязательна:** снова GET, diff jsCode ноды против репо-файла. В отчёт Начо — вывод diff (пустой = синхронизировано). Без этого вывода синк не считается выполненным.
 4. ⚠️ dev и prod фронтенды ходят в ОДИН n8n — синк меняет поведение обоих окружений сразу. Перед синком сохранить текущий workflow JSON в `projects/r4g/workflows/` (это и есть бэкап для отката ноды).
+5. **🔴 ОБЯЗАТЕЛЬНО: PUT-payload НЕ должен содержать поле `staticData` вообще** (не копировать его из GET, даже "как есть"). Причина (BUG-20260906-009, 2026-09-06): GET workflow'а может вернуть УСТАРЕВШИЙ снимок `staticData` — подтверждено напрямую: бэкап-JSON, снятый мной через GET в 19:40-19:41, содержал `brokerRows.TB_V`/`.TB_A` с их ПЕРВОНАЧАЛЬНЫМИ таймстемпами сабмита (14:59/15:05), хотя Kim независимо подтвердила чистое (post-purge) состояние живым чтением за 1-2 минуты до этого GET (19:39). Мой PUT, отправивший этот снимок обратно "как есть, без изменений", механически откатил purge — то же самое семейство гонки staticData, что и `BUG-20260806-005`, но на уровне синка редактора (GET/PUT всего воркфлоу), а не между двумя вебхуками. **Точный внутренний механизм n8n (почему конкретно этот GET оказался устаревшим) не выяснен до конца** — единичная контролируемая запись+GET воспроизводит live-данные корректно за <1с, устаревание проявилось именно после серии быстрых вызовов (12 purge-запросов) и не было переисследовано повторным намеренным воспроизведением на живых данных (риск непропорционален пользе). Но **обходной путь подтверждён эмпирически и безопасен**: PUT без поля `staticData` в payload — n8n сохраняет живой staticData сервера нетронутым (проверено на sandbox 2026-09-06: PUT `{name, nodes, connections, settings}` без `staticData` → GET сразу после — `brokerRows` идентичны, ни один живой ключ не тронут). Формировать PUT-payload вручную из четырёх полей (`name`, `nodes`, `connections`, `settings: {executionOrder}`), никогда не копировать `staticData` из ответа GET в тело PUT — ни при синке одной ноды, ни целиком "как есть".
 
 ### [5] Прод-деплой ready2net.online — только по явному approval
 
