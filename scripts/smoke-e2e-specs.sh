@@ -103,7 +103,30 @@
 # stated in terms of prod-MUTATING calls (identity/auth actions included), not
 # of one endpoint.
 #
+# ── TASK-20260907-001: live-start runs in parallel, not serially ────────────
+#
+# Step 2 (below) used to run one file at a time: node --check + classify are
+# cheap, but the live-start itself is capped at STARTUP_TIMEOUT seconds PER
+# FILE and ran strictly sequentially — wall time was
+# (files needing live-start) × up to STARTUP_TIMEOUT seconds. That was fine
+# at 69 e2e specs (mid-August); by 2026-09-07 the suite had grown to 106 (new
+# cards keep adding live-browser specs) and the serial live-start alone took
+# 6m06s, on top of ~4 minutes for Jest + the other checks — pushing the whole
+# nightly run-r4g-tests.sh past the scheduler's 10-minute budget and silently
+# losing this section from the report (TASK-20260907-001, diagnosed by Olaf).
+#
+# The fix is not a bigger timeout (that only postpones the next overrun as
+# the suite keeps growing) — it's removing the SERIAL bottleneck. Every file
+# is independent and already individually capped, so nothing about the
+# per-file check changes: they now launch concurrently (default 6 at once,
+# override with SMOKE_MAX_PARALLEL), each still killed at STARTUP_TIMEOUT if
+# it hasn't crashed or exited by then. Classification (Step 1 + 1b, including
+# the marker/writer/egress-guard gates) still runs FIRST and fully
+# sequentially — it's microseconds per file and deciding what to run has to
+# finish before deciding how to run it in parallel.
+#
 # Usage: bash scripts/smoke-e2e-specs.sh
+# Env:   SMOKE_MAX_PARALLEL — concurrent live-starts (default 6)
 # Exit:  0 = every file starts cleanly, 1 = at least one failed to start, or a
 #            prod-mutating spec is missing its marker, or the egress guard is
 #            missing
@@ -171,8 +194,10 @@ CHECKED=0
 SKIPPED_LIVE=0
 SKIPPED_NOTE=""
 TMP_ERR="/tmp/smoke-e2e-check-err.$$"
-TMP_RUN="/tmp/smoke-e2e-run-out.$$"
-trap 'rm -f "$TMP_ERR" "$TMP_RUN"' EXIT
+LIVE_TMPDIR="$(mktemp -d /tmp/smoke-e2e-live.XXXXXX)"
+MAX_PARALLEL="${SMOKE_MAX_PARALLEL:-6}"
+trap 'rm -f "$TMP_ERR"; rm -rf "$LIVE_TMPDIR"' EXIT
+LIVE_QUEUE=()
 
 # Fail closed: without the egress guard, step 2 is exactly the unguarded
 # live start that wrote to production twice. Report it loudly and run the
@@ -235,23 +260,68 @@ for f in "$E2E_DIR"/*.spec.js; do
     continue
   fi
 
-  # ── Step 2: short live-start check ──────────────────────────────────
-  # Preloaded with the egress guard (BUG-20260907-001) — no request this
-  # process makes can leave it. Absence of the guard is a hard stop, not a
-  # downgrade to an unguarded run: the guard is the reason step 2 is allowed
-  # to exist at all.
-  START_NS=$(date +%s%N)
-  timeout -s KILL "$STARTUP_TIMEOUT" node --require "$EGRESS_GUARD" "$f" >"$TMP_RUN" 2>&1
-  CODE=$?
-  END_NS=$(date +%s%N)
-  ELAPSED_MS=$(((END_NS - START_NS) / 1000000))
+  # ── Step 2 (queued): this file passed classification — it gets a live
+  # start, but not right here. See the parallel runner below (TASK-20260907-001).
+  LIVE_QUEUE+=("$f")
+done
+
+# ── Step 2: short live-start check, run concurrently ─────────────────────
+# Preloaded with the egress guard (BUG-20260907-001) — no request this
+# process makes can leave it. Absence of the guard is a hard stop, not a
+# downgrade to an unguarded run: the guard is the reason step 2 is allowed
+# to exist at all. (GUARD_OK=0 already sent every file through the skip
+# branch above, so LIVE_QUEUE is empty in that case — this loop is a no-op,
+# not a second gate.)
+#
+# TASK-20260907-001: bounded concurrency (SMOKE_MAX_PARALLEL, default 6)
+# instead of one-at-a-time. Each file keeps its own STARTUP_TIMEOUT-second
+# cap and its own output file — nothing about the per-file verdict logic
+# below differs from the old serial version, only that many run at once.
+run_one_live() {
+  local f="$1" idx="$2"
+  local start_ns end_ns code elapsed_ms
+  start_ns=$(date +%s%N)
+  timeout -s KILL "$STARTUP_TIMEOUT" node --require "$EGRESS_GUARD" "$f" >"$LIVE_TMPDIR/$idx.out" 2>&1
+  code=$?
+  end_ns=$(date +%s%N)
+  elapsed_ms=$(((end_ns - start_ns) / 1000000))
+  printf '%s %s\n' "$code" "$elapsed_ms" > "$LIVE_TMPDIR/$idx.res"
+}
+
+LIVE_IDX_FILE=()
+idx=0
+for f in ${LIVE_QUEUE[@]+"${LIVE_QUEUE[@]}"}; do
+  LIVE_IDX_FILE[$idx]="$f"
+  run_one_live "$f" "$idx" &
+  idx=$((idx + 1))
+  # Throttle: block new launches once MAX_PARALLEL jobs are in flight.
+  while [ "$(jobs -r -p | wc -l)" -ge "$MAX_PARALLEL" ]; do
+    wait -n 2>/dev/null || true
+  done
+done
+wait
+
+for ((li = 0; li < idx; li++)); do
+  f="${LIVE_IDX_FILE[$li]}"
+  base="$(basename "$f")"
+  RES_FILE="$LIVE_TMPDIR/$li.res"
+  RUN_FILE="$LIVE_TMPDIR/$li.out"
+
+  if [ ! -f "$RES_FILE" ]; then
+    # Should not happen (the trailing `wait` above waits for every job this
+    # loop launched) — reported rather than silently dropped if it ever does.
+    OUT+="❌ $base: live-start produced no result (job did not finish)"$'\n'
+    FAIL=1
+    continue
+  fi
+  read -r CODE ELAPSED_MS < "$RES_FILE"
 
   if [ "$CODE" -eq 137 ] && [ "$ELAPSED_MS" -ge $((STARTUP_TIMEOUT * 1000 - 500)) ]; then
     : # ran the full window before we killed it — started fine
   elif [ "$CODE" -eq 0 ]; then
     : # fast clean finish — started (and finished) fine
   elif [ "$ELAPSED_MS" -lt "$CRASH_THRESHOLD_MS" ]; then
-    ERRLINE="$(grep -m1 -E 'Error|Cannot find module|SyntaxError' "$TMP_RUN" || tail -1 "$TMP_RUN")"
+    ERRLINE="$(grep -m1 -E 'Error|Cannot find module|SyntaxError' "$RUN_FILE" || tail -1 "$RUN_FILE")"
     OUT+="❌ $base: crashed ${ELAPSED_MS}ms after start (exit $CODE) — $ERRLINE"$'\n'
     FAIL=1
   fi
