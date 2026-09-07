@@ -72,16 +72,41 @@
 #      cost of a false positive is someone adding one comment line; the cost of
 #      a false negative is the incident above, on production, at 02:04 UTC.
 #
-# Deliberate boundary, stated rather than left implicit: this guards the broker
-# CONFIG endpoint only — the flag that decides whether a broker can reach the
-# feature at all. Specs that POST rounds to other production endpoints append
-# to history rather than revoke access, and are out of scope here; the durable
-# answer for all of them is the admin key on the write path (part 2 of this
-# card), not a longer regex.
+# ── BUG-20260907-001: the same hole, one endpoint over ───────────────────────
+#
+# The boundary drawn above ("this guards the broker CONFIG endpoint only") held
+# for exactly one month and then cost us again. Every night at 02:00 UTC this
+# script started identityMismatchBUG20260814004.spec.js and
+# accountRevocationBrowserBUG20260814016.spec.js, whose opening move is a real
+# `person_create` + `link_request` against the shared n8n backend. Five seconds
+# was plenty: real test people were created in production and real magic-link
+# emails landed in am@ready2net.com, night after night, until Alex noticed the
+# inbox. Neither spec touches broker-config, so the safety net above never saw
+# them.
+#
+# The lesson is not "add identity to the regex". It is that a deny-LIST can
+# only ever contain the incidents that already happened, while this script
+# starts arbitrary files and kills them mid-flight. So the primary defence is
+# now a property of the RUN, not a claim about the file:
+#
+#   3. EGRESS GUARD (primary, unconditional) — every live start is preloaded
+#      with scripts/e2e-smoke-egress-guard.cjs, which hands every non-loopback
+#      HTTP/HTTPS request and every fetch() a black hole: written bytes go
+#      nowhere, no response ever arrives, no error is raised. A spec started
+#      here cannot reach any remote server, whatever it decides to call. If the
+#      guard file is missing, step 2 does not run at all (fail closed).
+#
+# The two static mechanisms below are kept as a second layer, because the guard
+# cannot see inside the CHROMIUM process Playwright spawns — a browser-side
+# `page.evaluate(() => fetch(prod, {method:'POST'}))` leaves this process's
+# network stack untouched. The static layer is what covers that, so it is now
+# stated in terms of prod-MUTATING calls (identity/auth actions included), not
+# of one endpoint.
 #
 # Usage: bash scripts/smoke-e2e-specs.sh
 # Exit:  0 = every file starts cleanly, 1 = at least one failed to start, or a
-#            prod-config writer is missing its marker
+#            prod-mutating spec is missing its marker, or the egress guard is
+#            missing
 # ─────────────────────────────────────────────────────────────────
 set -uo pipefail
 
@@ -116,6 +141,30 @@ CONFIG_PATH_RE='broker-config'
 # admin key on the write path (part 2 of this card), not a longer list.
 CONFIG_WRITE_RE='(apiPost|postJson|postToBackend|postNetting|httpPost)[[:space:]]*\([[:space:]]*[A-Za-z_]*CONFIG[A-Za-z_]*|(apiPost|postJson|postToBackend|postNetting|httpPost)[[:space:]]*\([[:space:]]*.[^,]*broker-config'
 
+# BUG-20260907-001 — identity/auth mutations. Matched on the ACTION VALUE in a
+# request body (`action: 'person_create'`), not on the bare word, and that is
+# deliberate: nine specs in this suite mention person_update/account_purge in
+# prose ("...triggers a person_update request"), and one keeps
+# 'admin-key-generate' in an allow-list of expected writes. Anchoring on
+# `action:` + quotes matches call sites only — verified against the whole suite
+# at the time of writing: 4 files, all four of them real live mutators, zero
+# comment-only false positives. It matches browser-side call sites too
+# (`page.evaluate(() => fetch(url, {body: JSON.stringify({action:'link_request'})}))`),
+# which is the case the runtime egress guard structurally cannot cover.
+#
+# Not listed on purpose: 'admin-key-generate'. It mints a short-lived admin key
+# and has no user-visible effect — no person, no email, no config change — and
+# six otherwise-healthy specs would lose their live-start smoke for it. During
+# the start window the egress guard blocks it anyway.
+MUTATING_ACTION_RE="action[[:space:]]*:[[:space:]]*['\"](person_create|person_update|person_delete|link_request|account_purge|password_set_own)['\"]"
+
+# BUG-20260907-001 — the unconditional egress guard preloaded into every live
+# start. See its header for what it does and what it cannot see. The override,
+# like E2E_DIR above, exists so test-smoke-e2e-specs.sh can point this at a
+# nonexistent path and prove the fail-closed branch actually fails closed —
+# not meant to be set in normal/nightly usage.
+EGRESS_GUARD="${E2E_SMOKE_EGRESS_GUARD_PATH:-$SCRIPT_DIR/e2e-smoke-egress-guard.cjs}"
+
 FAIL=0
 OUT=""
 CHECKED=0
@@ -124,6 +173,17 @@ SKIPPED_NOTE=""
 TMP_ERR="/tmp/smoke-e2e-check-err.$$"
 TMP_RUN="/tmp/smoke-e2e-run-out.$$"
 trap 'rm -f "$TMP_ERR" "$TMP_RUN"' EXIT
+
+# Fail closed: without the egress guard, step 2 is exactly the unguarded
+# live start that wrote to production twice. Report it loudly and run the
+# static half only — a red build, never a silent unguarded run.
+GUARD_OK=1
+if [ ! -f "$EGRESS_GUARD" ]; then
+  GUARD_OK=0
+  FAIL=1
+  OUT+="❌ egress guard missing: $EGRESS_GUARD — live-start step disabled for ALL files "
+  OUT+="(node --check still applied). Restore the file, see BUG-20260907-001."$'\n'
+fi
 
 for f in "$E2E_DIR"/*.spec.js; do
   [ -f "$f" ] || continue
@@ -145,20 +205,30 @@ for f in "$E2E_DIR"/*.spec.js; do
   grep -qF "$SKIP_MARKER" "$f" && HAS_MARKER=1
 
   LOOKS_LIKE_WRITER=0
+  WRITER_WHAT=""
   if grep -qE "$CONFIG_PATH_RE" "$f" && grep -qE "$CONFIG_WRITE_RE" "$f"; then
     LOOKS_LIKE_WRITER=1
+    WRITER_WHAT="posts to the PRODUCTION broker-config"
+  elif grep -qE "$MUTATING_ACTION_RE" "$f"; then
+    LOOKS_LIKE_WRITER=1
+    ACTIONS="$(grep -ohE "$MUTATING_ACTION_RE" "$f" \
+      | grep -ohE "(person_create|person_update|person_delete|link_request|account_purge|password_set_own)" \
+      | sort -u | paste -sd, -)"
+    WRITER_WHAT="calls live identity/auth mutations against production ($ACTIONS)"
   fi
 
-  if [ "$HAS_MARKER" -eq 1 ] || [ "$LOOKS_LIKE_WRITER" -eq 1 ]; then
+  if [ "$HAS_MARKER" -eq 1 ] || [ "$LOOKS_LIKE_WRITER" -eq 1 ] || [ "$GUARD_OK" -eq 0 ]; then
     # Skip the live start either way — including the unmarked case, so a
     # forgotten marker costs a red build, never a production write.
     SKIPPED_LIVE=$((SKIPPED_LIVE + 1))
-    if [ "$HAS_MARKER" -eq 1 ]; then
+    if [ "$GUARD_OK" -eq 0 ] && [ "$HAS_MARKER" -eq 0 ] && [ "$LOOKS_LIKE_WRITER" -eq 0 ]; then
+      SKIPPED_NOTE+="   · $base — live start skipped (egress guard missing, flagged above)"$'\n'
+    elif [ "$HAS_MARKER" -eq 1 ]; then
       REASON="$(grep -oE "$SKIP_MARKER:?[[:space:]]*.*" "$f" | head -1 | sed "s/$SKIP_MARKER:\?[[:space:]]*//")"
       SKIPPED_NOTE+="   · $base — live start skipped: ${REASON:-marked, no reason given}"$'\n'
     else
-      OUT+="❌ $base: posts to the PRODUCTION broker-config but carries no $SKIP_MARKER marker. "
-      OUT+="Add the marker (with a reason) or stop the spec writing to production — see BUG-20260808-001."$'\n'
+      OUT+="❌ $base: $WRITER_WHAT but carries no $SKIP_MARKER marker. "
+      OUT+="Add the marker (with a reason) or stop the spec writing to production — see BUG-20260808-001, BUG-20260907-001."$'\n'
       SKIPPED_NOTE+="   · $base — live start skipped (unmarked writer, flagged above)"$'\n'
       FAIL=1
     fi
@@ -166,8 +236,12 @@ for f in "$E2E_DIR"/*.spec.js; do
   fi
 
   # ── Step 2: short live-start check ──────────────────────────────────
+  # Preloaded with the egress guard (BUG-20260907-001) — no request this
+  # process makes can leave it. Absence of the guard is a hard stop, not a
+  # downgrade to an unguarded run: the guard is the reason step 2 is allowed
+  # to exist at all.
   START_NS=$(date +%s%N)
-  timeout -s KILL "$STARTUP_TIMEOUT" node "$f" >"$TMP_RUN" 2>&1
+  timeout -s KILL "$STARTUP_TIMEOUT" node --require "$EGRESS_GUARD" "$f" >"$TMP_RUN" 2>&1
   CODE=$?
   END_NS=$(date +%s%N)
   ELAPSED_MS=$(((END_NS - START_NS) / 1000000))
