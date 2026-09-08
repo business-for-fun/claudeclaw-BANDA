@@ -35,9 +35,23 @@ SECRETS_DIR="$PROJECT_ROOT/secrets"
 
 # ── n8n server definitions ──
 # Format: "label|host|api_key_file"
+#
+# TASK-20260908-001 (Olaf, 2026-09-08): LIMO's n8n workflows (Poller,
+# Booking.com webhooks, Sheets-sync) migrated off 10.128.0.7 to the FAM host
+# 10.128.0.3 on 2026-08-19 (see memory chunk BUG-20260819-001 / card
+# TASK-20260815-004). On 2026-08-20 the old LIMO VM (10.128.0.7) was torn
+# down and repurposed as R4G-PROD/VM3 — that address now hosts an unrelated
+# n8n instance (R4G sandbox, sandbox.ready2net.online) whose n8n only binds
+# 127.0.0.1:5678 and was never reachable on this port from other hosts in
+# the first place. Pointing "limo" at 10.128.0.7 here was stale since the
+# migration: every nightly run failed with "Cannot reach" for limo, not
+# because anything was down, but because the address was simply wrong.
+# Fixed: limo now shares the same host+port as fam (10.128.0.3), matching
+# where the LIMO workflows actually live today. Keep the API key file
+# separate (limo_n8n_api_key) in case LIMO ever gets its own key again.
 SERVERS=(
   "r4g|http://10.128.0.5:5678|$SECRETS_DIR/r4g_n8n_api_key"
-  "limo|http://10.128.0.7:5678|$SECRETS_DIR/limo_n8n_api_key"
+  "limo|http://10.128.0.3:5678|$SECRETS_DIR/limo_n8n_api_key"
   "fam|http://10.128.0.3:5678|$SECRETS_DIR/fam_n8n_api_key"
 )
 
@@ -130,6 +144,20 @@ export_from_server() {
 
     if ! echo "$page_json" | python3 -c "import sys,json; json.load(sys.stdin)" 2>/dev/null; then
       log "ERROR: Invalid JSON response from $label (page $page_num)"
+      rm -f "$pages_file"
+      return
+    fi
+
+    # TASK-20260908-001 (Olaf, 2026-09-08): n8n answers an expired/invalid
+    # API key with HTTP 401 + {"message":"Unauthorized"} — still valid JSON,
+    # and .get('data',[]) on it silently evaluates to an empty list. Before
+    # this check, an auth failure was indistinguishable from "this server
+    # genuinely has zero workflows" and was logged as the latter, hiding the
+    # real problem (found while investigating this task: fam/limo API keys
+    # are stale, confirmed via direct curl — 401 on both). Fail loudly
+    # instead of silently reporting "no workflows found".
+    if ! echo "$page_json" | python3 -c "import sys,json; sys.exit(0 if 'data' in json.load(sys.stdin) else 1)" 2>/dev/null; then
+      log "ERROR: $label API rejected the request (no 'data' field in response, page $page_num): $(echo "$page_json" | head -c 200)"
       rm -f "$pages_file"
       return
     fi
