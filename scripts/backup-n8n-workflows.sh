@@ -200,6 +200,22 @@ for w in workflows:
     safe_name=$(sanitize_name "$wf_name")
     filepath="$target_dir/${safe_name}.json"
 
+    # BUG-20260908-001 (Olaf, 2026-09-08): capture the OLD staticData.global size
+    # before we overwrite the file, so we can detect a collapse after writing.
+    # See the ALERT block below for why this exists.
+    old_static_size=0
+    if [ -f "$filepath" ]; then
+      old_static_size=$(python3 -c "
+import json
+try:
+    with open('$filepath') as f:
+        d = json.load(f)
+    print(len(json.dumps(d.get('staticData', {}).get('global', {}))))
+except Exception:
+    print(0)
+" 2>/dev/null || echo 0)
+    fi
+
     # Write pretty-printed JSON
     echo "$line" | python3 -c "
 import sys, json
@@ -209,6 +225,52 @@ for key in ['updatedAt', 'versionId', 'statistics']:
     data.pop(key, None)
 print(json.dumps(data, indent=2, ensure_ascii=False))
 " > "$filepath"
+
+    # BUG-20260908-001 (Olaf, 2026-09-08): alert on a sudden staticData.global
+    # collapse instead of silently committing it as a routine backup diff.
+    #
+    # 2026-09-08 incident: R4G_BrokerSync_v1's staticData.global went
+    # 373KB -> 70B (22 brokerPasswords, 7 brokerRows, 15 brokerCredits, 71
+    # nettingLog, 71 accountAudit, 5 accountRevocations, 12 nettingResults all
+    # zeroed to the Code node's own init-default) and R4G_Credit_Save's
+    # adminKey emptied, in the SAME nightly backup run that had exported full
+    # data the day before. The backup script itself did nothing wrong — it
+    # honestly recorded the live server's state — but it committed a 24853
+    # deletion / 211 insertion diff without a single warning line, so the loss
+    # sat undiscovered until Gale happened to look at the diff stat by hand.
+    # A cheap size-ratio check here would have turned that into an immediate
+    # Telegram page instead of a silent commit.
+    #
+    # Threshold: only fires above a 2KB floor (skips tiny/empty workflows
+    # where noise is common and the blast radius is negligible) and only on a
+    # >70% drop (a normal purge/cleanup operation can legitimately shrink
+    # state by a smaller amount; 70%+ on a workflow that already held >2KB is
+    # the "went to (near) zero" shape this incident actually had).
+    new_static_size=$(python3 -c "
+import json
+try:
+    with open('$filepath') as f:
+        d = json.load(f)
+    print(len(json.dumps(d.get('staticData', {}).get('global', {}))))
+except Exception:
+    print(0)
+" 2>/dev/null || echo 0)
+
+    if [ "$old_static_size" -gt 2000 ] 2>/dev/null; then
+      collapsed=$(python3 -c "print(1 if $new_static_size < $old_static_size * 0.3 else 0)" 2>/dev/null || echo 0)
+      if [ "$collapsed" = "1" ]; then
+        alert_msg="🔴 [n8n-backup] staticData COLLAPSE: '${wf_name}' (${wf_id}) went ${old_static_size}B -> ${new_static_size}B staticData.global in one backup run. Possible live data loss on 10.128.0.5 — do NOT assume this is a normal purge until checked. See scripts/backup-n8n-workflows.sh BUG-20260908-001 note."
+        log "ALERT: $alert_msg"
+        bot_token=$(grep "TELEGRAM_BOT_TOKEN" "$PROJECT_ROOT/.env" 2>/dev/null | head -1 | cut -d= -f2)
+        if [ -n "$bot_token" ]; then
+          curl -s -X POST "https://api.telegram.org/bot${bot_token}/sendMessage" \
+            -d "chat_id=6655962301" \
+            --data-urlencode "text=${alert_msg}" > /dev/null 2>&1
+        else
+          log "ALERT: no TELEGRAM_BOT_TOKEN in $PROJECT_ROOT/.env, could not page — see log line above"
+        fi
+      fi
+    fi
 
     TOTAL_EXPORTED=$((TOTAL_EXPORTED + 1))
   done
