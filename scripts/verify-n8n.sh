@@ -203,6 +203,21 @@ MAP=(
   # this drift class doesn't repeat (same gap pattern as 'Store iNet Credits'
   # found missing during BUG-20260921-003). ──
   "pXoEwtpYF3q5MklB|Envelope: File iNet ML Deals|$R4G_DIR/service_call_file_inet_ml_deals.js"
+
+  # ── FEAT-20260922-002 (Olaf, 2026-09-23): creditsV2 shadow-mode backend
+  # foundation. credit_mode_switch.js is ONE file deployed into every workflow
+  # holding a v2 store — same account_purge.js pattern, same reason (n8n gives
+  # a node no way to reach another workflow's staticData). n8n enforces webhook
+  # paths as GLOBALLY unique, so the two copies can NOT share one path: the
+  # R4G_Credit_Save copy keeps the canonical 'r4g/credit-mode-switch' from the
+  # file's own header comment, the R4G_INetCredits_v1 copy is on
+  # 'r4g/credit-mode-switch-inet-credits' (confirmed live via webhook_entity —
+  # registering the same path twice returns HTTP 409 and the second copy's
+  # route silently never registers, it does not steal the first copy's route).
+  # trader_credits_v2.js is single-instance, R4G_Credit_Save only. ──
+  "AibeoQC5WwY5mmN7|Credit Mode Switch|$R4G_DIR/credit_mode_switch.js"
+  "NAPvI3oGvRxRabkt|Credit Mode Switch|$R4G_DIR/credit_mode_switch.js"
+  "AibeoQC5WwY5mmN7|Trader Credits V2|$R4G_DIR/trader_credits_v2.js"
 )
 
 TMP="$(mktemp -d)"
