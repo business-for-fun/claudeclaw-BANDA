@@ -195,6 +195,14 @@ MAP=(
   "pXoEwtpYF3q5MklB|Parse Stats Query (Sub-Call)|$R4G_DIR/parse_stats_query.js"
   "pXoEwtpYF3q5MklB|Compute iNet Stats (Sub-Call)|$R4G_DIR/internal_netting_v1.js"
   "pXoEwtpYF3q5MklB|Return: iNet Stats|$R4G_DIR/inet_stats_subcall_return.js"
+
+  # ── BUG-20260922-009 (Olaf, 2026-09-23): bridge node installed by
+  # tools/bug20260922009_file_inet_ml_deals_bridge.py, fans out from Compute
+  # Internal Netting. Was missing from this MAP entirely since the node was
+  # created (part 2, commit 78871c3) — added now during the part-3 resync so
+  # this drift class doesn't repeat (same gap pattern as 'Store iNet Credits'
+  # found missing during BUG-20260921-003). ──
+  "pXoEwtpYF3q5MklB|Envelope: File iNet ML Deals|$R4G_DIR/service_call_file_inet_ml_deals.js"
 )
 
 TMP="$(mktemp -d)"
