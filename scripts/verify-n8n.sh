@@ -218,6 +218,19 @@ MAP=(
   "AibeoQC5WwY5mmN7|Credit Mode Switch|$R4G_DIR/credit_mode_switch.js"
   "NAPvI3oGvRxRabkt|Credit Mode Switch|$R4G_DIR/credit_mode_switch.js"
   "AibeoQC5WwY5mmN7|Trader Credits V2|$R4G_DIR/trader_credits_v2.js"
+
+  # ── FEAT-20260922-004 (Gale, 2026-09-25): the gate in FRONT of those two.
+  # credit_mode_switch.js gained a second door — a company-wide session may
+  # switch its own broker — and it reads that session from `__identity`, which
+  # only auth_gate.js ever writes. Both copies shipped WITHOUT a gate ahead of
+  # them, so __identity was null on every request and a genuine broker session
+  # got the endpoint's last-resort refusal (Kim, 2026-09-24, reproduced live 3x
+  # while the cookie was demonstrably arriving). Listed here because the wiring
+  # is only half the fix: a gate carrying a stale copy is the same outage with a
+  # longer diagnosis. Graph shape itself is pinned by
+  # frontend/__tests__/unit/workflows/creditModeSwitchAuthGateWiringFEAT20260922004.test.js. ──
+  "AibeoQC5WwY5mmN7|Auth Gate: Credit Mode Switch|$R4G_DIR/auth_gate.js"
+  "NAPvI3oGvRxRabkt|Auth Gate: Credit Mode Switch|$R4G_DIR/auth_gate.js"
 )
 
 TMP="$(mktemp -d)"
