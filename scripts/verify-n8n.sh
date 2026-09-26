@@ -12,10 +12,14 @@
 #        bash scripts/verify-n8n.sh --quiet  # no Telegram, exit code only
 # Exit:  0 = all synced, 1 = divergence found, 2 = API/config error
 #
-# Known divergences are expected while these cards are open:
-#   TASK-20260728-001 (ml_accept), TASK-20260728-002 (ml_state),
-#   TASK-20260728-003 (ml_start), netting Compute Plans (card TBD).
-# The daily alert doubles as a reminder until they close.
+# Known divergences (expected, tracked in store/verify-n8n-expected.txt) —
+# empty as of 2026-09-26 (Olaf, FEAT-20260926-001 sync): the
+# netting_compute_plans_v2.js/'Compute Plans' entry dated back to the
+# TASK-20260730-001 rollback and was confirmed stale — live had already
+# been re-synced to intraBrokerNetting='ml_only' since, the entry just
+# never got cleared. Re-add an entry here only for an ACTUAL open,
+# deliberate divergence, and remove it the moment that divergence closes —
+# a stale entry silences the real drift this script exists to catch.
 # ─────────────────────────────────────────────────────────────────
 set -uo pipefail
 
