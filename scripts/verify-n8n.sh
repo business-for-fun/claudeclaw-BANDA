@@ -248,6 +248,17 @@ MAP=(
   # the node was live and correct but this file and the repo workflow export
   # hadn't caught up, so this exact live==repo check couldn't see it. ──
   "AibeoQC5WwY5mmN7|Auth Gate: Trader Credits V2|$R4G_DIR/auth_gate.js"
+
+  # ── BUG-20260928-007 (Olaf, 2026-09-28): same gap, fourth occurrence in this
+  # workflow — broker_credits_get_all.js's dormant BUG-20260805-014 stub
+  # (`if (state.adminKey && adminKey !== state.adminKey)`, `state.adminKey`
+  # empty since April) handed every broker's credit matrix to a bare
+  # unauthenticated GET. Inserted 'Auth Gate: Get All Credits' between
+  # 'Webhook Get Credits' and 'Get All Credits', same node shape as the three
+  # gates above. Learned from Kim's BUG-20260926-004 finding: added this MAP
+  # line AND committed the repo workflow mirror in the SAME turn as the sync,
+  # not left for a later round. ──
+  "AibeoQC5WwY5mmN7|Auth Gate: Get All Credits|$R4G_DIR/auth_gate.js"
 )
 
 TMP="$(mktemp -d)"
