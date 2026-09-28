@@ -235,6 +235,19 @@ MAP=(
   # frontend/__tests__/unit/workflows/creditModeSwitchAuthGateWiringFEAT20260922004.test.js. ──
   "AibeoQC5WwY5mmN7|Auth Gate: Credit Mode Switch|$R4G_DIR/auth_gate.js"
   "NAPvI3oGvRxRabkt|Auth Gate: Credit Mode Switch|$R4G_DIR/auth_gate.js"
+
+  # ── BUG-20260926-004 (Olaf, 2026-09-28): same gap, third occurrence in this
+  # workflow. trader_credits_v2.js's batch action:'get' has read __identity
+  # since FEAT-20260922-002, but Webhook Trader Credits V2 went straight to
+  # Trader Credits V2 with no gate ahead of it — __identity was always null,
+  # so the batch endpoint handed every trader's limits + the whole approval
+  # graph (FEAT-20260926-002) to an unauthenticated curl. Inserted
+  # 'Auth Gate: Trader Credits V2' between them, modeled on the Credit Mode
+  # Switch pair above (same node shape, same auth_gate.js payload). Missing
+  # from this MAP was flagged by Kim during BUG-20260926-004 acceptance —
+  # the node was live and correct but this file and the repo workflow export
+  # hadn't caught up, so this exact live==repo check couldn't see it. ──
+  "AibeoQC5WwY5mmN7|Auth Gate: Trader Credits V2|$R4G_DIR/auth_gate.js"
 )
 
 TMP="$(mktemp -d)"
