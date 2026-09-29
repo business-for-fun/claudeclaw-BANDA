@@ -55,6 +55,18 @@ MAP=(
   "keQOweGX4eAkLyUc|Code: ML Start|$R4G_DIR/ml_start_fix.js"
   "keQOweGX4eAkLyUc|Code: ML Stop|$R4G_DIR/ml_stop_fix.js"
   "R5LHPUynalETS74X|Compute Plans|$R4G_DIR/netting_compute_plans_v2.js"
+
+  # ── BUG-20260924-004 (Olaf, 2026-09-29): same file deployed TWICE in this
+  # workflow since FEAT-20260902-003 (node's own header comment: "one file
+  # rather than a second one" — UPLOAD ROWS path vs LP-residual ML search
+  # path after Netting Engine Router) — 'ML Residual Pass' was never added
+  # to this MAP, so it silently missed every sync since 2026-09-02 (9
+  # commits: hub-scoped credit limits, parametric permission gates, buy-leg
+  # rule, My Brokers consent gate, today's hub-rename fix). Found live via
+  # Gale's fixture note in this card; confirmed by content (BFS_TIME_BUDGET_MS/
+  # MAX_BFS_STATES present, matching the 2026-05-29 safety guards, but every
+  # feature added after 2026-09-02 absent) before re-syncing both copies. ──
+  "R5LHPUynalETS74X|ML Residual Pass|$R4G_DIR/netting_compute_plans_v2.js"
   "R5LHPUynalETS74X|Netting Engine Router|$R4G_DIR/netting_engine_router.js"
   "R5LHPUynalETS74X|Parse Webhook Input|$R4G_DIR/netting_parse_webhook_input.js"
   "R5LHPUynalETS74X|Return Summary|$R4G_DIR/netting_return_summary.js"
