@@ -271,6 +271,17 @@ MAP=(
   # line AND committed the repo workflow mirror in the SAME turn as the sync,
   # not left for a later round. ──
   "AibeoQC5WwY5mmN7|Auth Gate: Get All Credits|$R4G_DIR/auth_gate.js"
+
+  # ── BUG-20260929-011 (Olaf, 2026-09-30): inet_engine_router.js had ZERO
+  # entries in this MAP since it was created (FEAT-20260806-001 part 2) — same
+  # gap class as 'ML Residual Pass' (BUG-20260924-004) and the four Auth Gate
+  # misses above, flagged this time by Gale while fixing this card rather than
+  # found independently. Live node is 'iNET Engine Router' (id
+  # f14f6ed0-38e0-42b3-8798-da9f4dcb9e67) in R4G_InternalNetting_v1
+  # (pXoEwtpYF3q5MklB), positioned right after 'Compute Internal Netting' —
+  # found by dumping every .code node's jsCode length/first-line from a fresh
+  # GET rather than guessing the name. ──
+  "pXoEwtpYF3q5MklB|iNET Engine Router|$R4G_DIR/inet_engine_router.js"
 )
 
 TMP="$(mktemp -d)"
