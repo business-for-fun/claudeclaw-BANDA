@@ -8,8 +8,24 @@
 #
 # Read-only: GET only, never writes to n8n. Alerts Telegram on divergence.
 #
-# Usage: bash scripts/verify-n8n.sh          # report + alert if diverged
-#        bash scripts/verify-n8n.sh --quiet  # no Telegram, exit code only
+# TASK-20260930-001 (Olaf, 2026-09-30): compares live n8n against a git REF
+# of $R4G_DIR (via `git show <ref>:<path>`), never the raw file on disk.
+# $R4G_DIR ($PROJECT_ROOT/projects/r4g) is its own git repo (a separate
+# checkout mounted under banda/projects/r4g, not part of the banda repo) —
+# multiple agents edit files on that disk throughout the day before
+# committing. Diffing straight off disk meant a sync/verify run could pick
+# up another agent's uncommitted, un-reviewed, possibly broken edit and
+# call it "synced" or "matches" — this is exactly what happened 2026-09-30
+# 05:02: Olaf's sync read Gale's step-4b edit off disk 16 minutes before
+# Gale committed it (8be24d05, 05:18). Harmless that time (the edit was
+# correct and later committed as-is), but the mechanism was a real race.
+# Default ref is HEAD (the last commit) — a dirty working tree no longer
+# affects the result either way.
+#
+# Usage: bash scripts/verify-n8n.sh                 # HEAD, report + alert if diverged
+#        bash scripts/verify-n8n.sh --quiet          # HEAD, no Telegram, exit code only
+#        bash scripts/verify-n8n.sh <git-ref>         # pin to a specific commit/tag
+#        bash scripts/verify-n8n.sh --quiet <git-ref> # both, either order
 # Exit:  0 = all synced, 1 = divergence found, 2 = API/config error
 #
 # Known divergences (expected, tracked in store/verify-n8n-expected.txt) —
@@ -33,12 +49,26 @@ if [ -f "$PROJECT_ROOT/.env" ]; then
 fi
 N8N_KEY="$(grep '^R4G_N8N_API_KEY=' "$PROJECT_ROOT/secrets/credentials.env" 2>/dev/null | cut -d= -f2- | tr -d '[:space:]"'"'"'')"
 N8N_URL="http://10.128.0.5:5678"
-QUIET="${1:-}"
+
+QUIET=""
+GIT_REF="HEAD"
+for arg in "$@"; do
+  case "$arg" in
+    --quiet) QUIET="--quiet" ;;
+    *) GIT_REF="$arg" ;;
+  esac
+done
 
 if [ -z "$N8N_KEY" ]; then
   echo "ERROR: R4G_N8N_API_KEY not found in secrets/credentials.env" >&2
   exit 2
 fi
+
+if ! git -C "$R4G_DIR" rev-parse --verify "$GIT_REF^{commit}" > /dev/null 2>&1; then
+  echo "ERROR: '$GIT_REF' does not resolve to a commit in $R4G_DIR" >&2
+  exit 2
+fi
+GIT_REF_RESOLVED="$(git -C "$R4G_DIR" rev-parse "$GIT_REF")"
 
 # ── Map: workflow_id | node name | repo file ──
 # R4G_ML_State_v1_FIXED    = keQOweGX4eAkLyUc (active ML workflow)
@@ -304,9 +334,10 @@ ERRORS=0
 for entry in "${MAP[@]}"; do
   IFS='|' read -r wf_id node_name repo_file <<< "$entry"
   short="$(basename "$repo_file")"
+  rel_path="${repo_file#"$R4G_DIR"/}"
 
-  if [ ! -f "$repo_file" ]; then
-    REPORT+="❓ $short: repo file missing"$'\n'; ERRORS=1; continue
+  if ! git -C "$R4G_DIR" show "$GIT_REF_RESOLVED:$rel_path" > "$TMP/repo_ref.js" 2>/dev/null; then
+    REPORT+="❓ $short: not found at git ref ${GIT_REF_RESOLVED:0:8} ($rel_path)"$'\n'; ERRORS=1; continue
   fi
   if ! fetch_workflow "$wf_id"; then
     REPORT+="❓ $short: n8n API fetch failed (workflow $wf_id)"$'\n'; ERRORS=1; continue
@@ -326,7 +357,7 @@ PYEOF
   fi
 
   # Normalize trailing whitespace on both sides before diffing
-  DIFF_LINES=$(diff <(sed 's/[[:space:]]*$//' "$repo_file") <(sed 's/[[:space:]]*$//' "$TMP/node.js") | wc -l)
+  DIFF_LINES=$(diff <(sed 's/[[:space:]]*$//' "$TMP/repo_ref.js") <(sed 's/[[:space:]]*$//' "$TMP/node.js") | wc -l)
   if [ "$DIFF_LINES" -eq 0 ]; then
     REPORT+="✅ $short == '$node_name'"$'\n'
   else
@@ -342,7 +373,7 @@ PYEOF
   fi
 done
 
-echo "── R4G n8n sync check ($(date -u '+%Y-%m-%d %H:%M UTC')) ──"
+echo "── R4G n8n sync check ($(date -u '+%Y-%m-%d %H:%M UTC'), git ref ${GIT_REF_RESOLVED:0:8}) ──"
 printf '%s' "$REPORT"
 
 EXIT=0
