@@ -295,6 +295,16 @@ MAP=(
   # hadn't caught up, so this exact live==repo check couldn't see it. ──
   "AibeoQC5WwY5mmN7|Auth Gate: Trader Credits V2|$R4G_DIR/auth_gate.js"
 
+  # ── FEAT-20261006-015 (Olaf, 2026-10-06): the one node that moves the global
+  # creditSource phase. POST r4g/credit-source-flip, gated like every other
+  # door in this workflow (webhook -> Auth Gate: Credit Source Flip ->
+  # Credit Source Flip) so audit actor resolves to a real person, not
+  # 'admin-key'. Added to the MAP myself this time (Gale's card did not
+  # pre-stage the entry) — same lesson as 'ML Residual Pass' drifting
+  # unmapped for a month if skipped. ──
+  "AibeoQC5WwY5mmN7|Auth Gate: Credit Source Flip|$R4G_DIR/auth_gate.js"
+  "AibeoQC5WwY5mmN7|Credit Source Flip|$R4G_DIR/credit_source_flip.js"
+
   # ── BUG-20260928-007 (Olaf, 2026-09-28): same gap, fourth occurrence in this
   # workflow — broker_credits_get_all.js's dormant BUG-20260805-014 stub
   # (`if (state.adminKey && adminKey !== state.adminKey)`, `state.adminKey`
