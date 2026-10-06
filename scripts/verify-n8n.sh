@@ -160,6 +160,10 @@ MAP=(
   "Kt71Tsx9cPLTns57|Prepare iNet Request|$R4G_DIR/admin_financials_prepare_inet_request.js"
   "NAPvI3oGvRxRabkt|Parse POST iNet Credits|$R4G_DIR/inet_credits_parse_post.js"
   "NAPvI3oGvRxRabkt|Parse GET iNet Credits|$R4G_DIR/inet_credits_parse_get.js"
+  # FEAT-20261006-011: second embedder of the legacy-migration mechanism, its own
+  # webhook (POST r4g/inet-credit-legacy-migration), no parse node in front (§1/§7
+  # of the card — deliberate, not an omission).
+  "NAPvI3oGvRxRabkt|iNet Credit Legacy Migration|$R4G_DIR/inet_credit_legacy_migration.js"
 
   # ── FEAT-20260805-004: account_purge.js, ONE file deployed unchanged into
   # all six workflows that hold client data (revoke access / delete account) ──
