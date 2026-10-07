@@ -26,7 +26,34 @@
 #        bash scripts/verify-n8n.sh --quiet          # HEAD, no Telegram, exit code only
 #        bash scripts/verify-n8n.sh <git-ref>         # pin to a specific commit/tag
 #        bash scripts/verify-n8n.sh --quiet <git-ref> # both, either order
+#        bash scripts/verify-n8n.sh --discover        # see below, no diff, no Telegram
 # Exit:  0 = all synced, 1 = divergence found, 2 = API/config error
+#
+# ── --discover (Olaf, 2026-10-07, FEAT-20261007-001 follow-up) ─────────────
+# This MAP is hand-curated — nothing in this script ever discovered a live
+# node on its own, it only diffs what someone already typed in. Found THREE
+# times now that this produces a real blind spot, not a hypothetical one:
+# BUG-20260921-003 (first sighting), BUG-20260922-009 (a bridge node, fixed
+# on the spot), and this card (Kim's live QA caught 'Store iNet Credits' — a
+# SIXTH embedder of inet_credits_v1.js, stale since 2026-09-21, sitting right
+# next to the 'Read iNet Credits' line below the whole time).
+#
+# `--discover` closes the class, not just the instance: it fetches every
+# workflow ID already IN this MAP (so it still can't find an entire missing
+# WORKFLOW — that needs a human adding the first line for it, same as always
+# — but within a known workflow it now needs nobody to notice a sibling node
+# by eye), lists every live node whose type ends in `.code`, and reports any
+# node NAME not already present in this MAP for that workflow ID. It does
+# NOT diff content (that's the normal run's job) and intentionally ignores
+# git ref / --quiet — a discovery pass is about COVERAGE, not drift, so it
+# always reports, never alerts Telegram, and exits 0 even when it finds gaps
+# (finding a gap and fixing this MAP are two different actions; this is
+# read-only, same as the rest of the script).
+#
+# Run this whenever a new workflow or node pair is suspected unmapped, and
+# periodically on general principle — it is cheap (one GET per MAP'd
+# workflow ID, not per node) and it is the only thing in this file that can
+# catch THIS failure mode before a live QA pass does.
 #
 # Known divergences (expected, tracked in store/verify-n8n-expected.txt) —
 # empty as of 2026-09-26 (Olaf, FEAT-20260926-001 sync): the
@@ -51,10 +78,12 @@ N8N_KEY="$(grep '^R4G_N8N_API_KEY=' "$PROJECT_ROOT/secrets/credentials.env" 2>/d
 N8N_URL="http://10.128.0.5:5678"
 
 QUIET=""
+DISCOVER=""
 GIT_REF="HEAD"
 for arg in "$@"; do
   case "$arg" in
     --quiet) QUIET="--quiet" ;;
+    --discover) DISCOVER="1" ;;
     *) GIT_REF="$arg" ;;
   esac
 done
@@ -84,6 +113,15 @@ MAP=(
   "keQOweGX4eAkLyUc|Code: Get ML State FIXED|$R4G_DIR/ml_state_fix.js"
   "keQOweGX4eAkLyUc|Code: ML Start|$R4G_DIR/ml_start_fix.js"
   "keQOweGX4eAkLyUc|Code: ML Stop|$R4G_DIR/ml_stop_fix.js"
+
+  # ── FEAT-20261007-001 follow-up (Olaf, 2026-10-07): a live --discover sweep
+  # (every Code node across all 16 MAP'd workflows, diffed by name against this
+  # array) run after Kim caught 'Store iNet Credits' missing below, turned up
+  # this SECOND, independent gap in the live ML_State workflow itself — 824
+  # lines, matches repo ml_cancel_accept.js, 0 diff at discovery time (lucky:
+  # never touched since creation, not evidence the gap is harmless going
+  # forward). Never added when the node/file were created (TASK-20260901-006).
+  "keQOweGX4eAkLyUc|Code: ML Cancel Accept|$R4G_DIR/ml_cancel_accept.js"
   "R5LHPUynalETS74X|Compute Plans|$R4G_DIR/netting_compute_plans_v2.js"
 
   # ── BUG-20260924-004 (Olaf, 2026-09-29): same file deployed TWICE in this
@@ -110,6 +148,21 @@ MAP=(
   "pXoEwtpYF3q5MklB|Inject iNet Credits|$R4G_DIR/inet_inject_credits.js"
   "pXoEwtpYF3q5MklB|Parse Stats Query|$R4G_DIR/parse_stats_query.js"
   "NAPvI3oGvRxRabkt|Read iNet Credits|$R4G_DIR/inet_credits_v1.js"
+
+  # ── FEAT-20261007-001 (Kim, 2026-10-07): 'Store iNet Credits' is a SIXTH
+  # live embedder of inet_credits_v1.js in this SAME workflow — the POST
+  # path (Webhook POST -> Parse POST iNet Credits -> Store iNet Credits),
+  # sibling of 'Read iNet Credits' above which only serves GET. Missing from
+  # this MAP since the node was created (FEAT-20260731-002) — "found missing
+  # during BUG-20260921-003" below (line ~261) already named this exact gap
+  # and it was never closed until Kim's live QA caught stale behaviour
+  # (BUG-20260921-003 was its newest marker, i.e. untouched by every
+  # inet_credits_v1.js change since). Root cause of the blind spot: this
+  # MAP is hand-curated with zero automated discovery — a GET/POST sibling
+  # pair sharing one source file is exactly the shape that's easy to add
+  # one half of and forget the other. See `--discover` flag added same day
+  # to catch this CLASS of gap going forward, not just this one instance. ──
+  "NAPvI3oGvRxRabkt|Store iNet Credits|$R4G_DIR/inet_credits_v1.js"
   "5AYqEk27XKzbmhg8|Broker Auth|$R4G_DIR/broker_auth.js"
   "5AYqEk27XKzbmhg8|Set Broker Password|$R4G_DIR/broker_password_set.js"
   "5AYqEk27XKzbmhg8|Get Broker Passwords|$R4G_DIR/broker_passwords_get.js"
@@ -340,6 +393,52 @@ fetch_workflow() { # $1=id → $TMP/wf_$1.json (cached)
     fi
   fi
 }
+
+if [ -n "$DISCOVER" ]; then
+  # One GET per DISTINCT workflow ID already in MAP (not per MAP line) —
+  # cheap even though MAP has 100+ entries across 16 workflows.
+  WF_IDS="$(printf '%s\n' "${MAP[@]}" | cut -d'|' -f1 | sort -u)"
+  GAPS=0
+  for wf_id in $WF_IDS; do
+    if ! fetch_workflow "$wf_id"; then
+      echo "❓ discover: n8n API fetch failed (workflow $wf_id)" >&2
+      continue
+    fi
+    MAPPED_NAMES="$(printf '%s\n' "${MAP[@]}" | awk -F'|' -v w="$wf_id" '$1==w{print $2}')"
+    UNMAPPED="$(python3 - "$TMP/wf_$wf_id.json" <<'PYEOF'
+import json, sys
+w = json.load(open(sys.argv[1]))
+print(w.get('name', '?'))
+for n in w['nodes']:
+    if n.get('type', '').endswith('.code'):
+        print('NODE:' + n['name'])
+PYEOF
+)"
+    WF_NAME="$(printf '%s\n' "$UNMAPPED" | head -1)"
+    CODE_NODE_NAMES="$(printf '%s\n' "$UNMAPPED" | tail -n +2 | sed 's/^NODE://')"
+    THIS_GAPS=""
+    while IFS= read -r node_name; do
+      [ -z "$node_name" ] && continue
+      if ! printf '%s\n' "$MAPPED_NAMES" | grep -qxF "$node_name"; then
+        THIS_GAPS+="    - $node_name"$'\n'
+        GAPS=$((GAPS + 1))
+      fi
+    done <<< "$CODE_NODE_NAMES"
+    if [ -n "$THIS_GAPS" ]; then
+      echo "❌ $wf_id ($WF_NAME): UNMAPPED Code node(s):"
+      printf '%s' "$THIS_GAPS"
+    else
+      echo "✅ $wf_id ($WF_NAME): every Code node is in MAP"
+    fi
+  done
+  echo
+  if [ "$GAPS" -eq 0 ]; then
+    echo "── discover: 0 unmapped Code nodes across $(printf '%s\n' "$WF_IDS" | wc -l) known workflows ──"
+  else
+    echo "── discover: $GAPS unmapped Code node(s) found — add each to MAP (with its repo file) before trusting a normal run's green on these workflows ──"
+  fi
+  exit 0
+fi
 
 REPORT=""
 DIVERGED=0
