@@ -144,6 +144,27 @@ MAP=(
   # missing from this MAP (Gale full scan, FEAT-20260805-003 step 0) ──
   "pXoEwtpYF3q5MklB|Compute Internal Netting|$R4G_DIR/internal_netting_v1.js"
   "JuqXmAGnOwEu2EAO|Read iNet History|$R4G_DIR/inet_history_v1.js"
+
+  # ── TASK-20261009-002 (Olaf, 2026-10-11): sibling node 'Parse GET iNet
+  # History' in this SAME workflow (JuqXmAGnOwEu2EAO) is DELIBERATELY left
+  # out of this MAP, not an oversight — do not add it on a future discover
+  # pass without re-reading this note. Confirmed via live GET (not just the
+  # repo mirror): workflow.active=false (updatedAt 2026-08-12), consistent
+  # with BUG-20260731-005 (31.07: deactivated because it duplicated the GET
+  # /inet-history interceptor already served by R4G_InternalNetting_v1;
+  # history reads were consolidated into internal_netting_v1.js's own
+  # get_history branch). The node itself is a 140-char inline snippet
+  # (`const query = $input.first().json.query || {}; const brokerName =
+  # query.broker || query.brokerName || ''; return [{ json: { brokerName
+  # } }];`) with NO matching repo file anywhere in this tree (grepped both
+  # the exact first line and the exact return statement — zero hits); it was
+  # written straight in the n8n editor pre-dating this repo's "file is
+  # source of truth" convention, never had one to drift from. Adding a MAP
+  # line pointing at a nonexistent file would make the NORMAL (non-discover)
+  # run permanently throw `❓ not found at git ref` / exit 2 on every call —
+  # worse than the discovery noise it would silence. Leaving it unmapped
+  # means `--discover` will keep reporting it as a gap forever; that is the
+  # correct, honest state (dead code, no sync target), not a TODO. ──
   "pXoEwtpYF3q5MklB|Parse Webhook Input|$R4G_DIR/inet_parse_webhook_input.js"
   "pXoEwtpYF3q5MklB|Inject iNet Credits|$R4G_DIR/inet_inject_credits.js"
   "pXoEwtpYF3q5MklB|Parse Stats Query|$R4G_DIR/parse_stats_query.js"
