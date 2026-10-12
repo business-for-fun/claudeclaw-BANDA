@@ -102,9 +102,9 @@ if [ "${1:-}" = "--parallel" ]; then
 # Nacho kept passing it, every heavy delegation died at exactly 10:00 with an
 # empty result, and the Empty-response protocol then demanded a pointless
 # /newchat. A timeout is a ceiling: flooring it never slows a fast task.
-MIN_TIMEOUT_MS=1800000
+MIN_TIMEOUT_MS=5400000
 if [ "$TIMEOUT_MS" -lt "$MIN_TIMEOUT_MS" ]; then
-  echo "WARN: timeoutMs=$TIMEOUT_MS is below the 30-min floor (600000 = 10 minutes, not 60). Raised to $MIN_TIMEOUT_MS." >&2
+  echo "WARN: явный timeoutMs=$TIMEOUT_MS занижен и поднят до штатных 90 минут. НЕ передавай третий аргумент вообще — дефолт уже правильный. Таймаут это потолок: он не ускоряет задачу, но обрывает её на середине (Gale 12.10: две задачи оборваны ровно на 30:02)." >&2
   TIMEOUT_MS=$MIN_TIMEOUT_MS
 fi
 
@@ -154,9 +154,9 @@ TIMEOUT_MS="${3:-5400000}"
 # Nacho kept passing it, every heavy delegation died at exactly 10:00 with an
 # empty result, and the Empty-response protocol then demanded a pointless
 # /newchat. A timeout is a ceiling: flooring it never slows a fast task.
-MIN_TIMEOUT_MS=1800000
+MIN_TIMEOUT_MS=5400000
 if [ "$TIMEOUT_MS" -lt "$MIN_TIMEOUT_MS" ]; then
-  echo "WARN: timeoutMs=$TIMEOUT_MS is below the 30-min floor (600000 = 10 minutes, not 60). Raised to $MIN_TIMEOUT_MS." >&2
+  echo "WARN: явный timeoutMs=$TIMEOUT_MS занижен и поднят до штатных $MIN_TIMEOUT_MS мс (90 минут). НЕ передавай третий аргумент вообще — дефолт уже правильный. Таймаут это потолок: он не ускоряет задачу, но обрывает её на середине (Gale 12.10: две задачи оборваны ровно на 30:02, потому что координатор слал 1800000)." >&2
   TIMEOUT_MS=$MIN_TIMEOUT_MS
 fi
 

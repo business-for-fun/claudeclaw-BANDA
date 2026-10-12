@@ -365,12 +365,42 @@ python3 - << 'PYEOF'
 s = open('scripts/delegate-to-agent.sh').read()
 if 'MIN_TIMEOUT_MS' not in s and 'TIMEOUT_MS="${3:-5400000}"' in s:
     guard = '''TIMEOUT_MS="${3:-5400000}"
-MIN_TIMEOUT_MS=1800000
+MIN_TIMEOUT_MS=5400000
 if [ "$TIMEOUT_MS" -lt "$MIN_TIMEOUT_MS" ]; then
-  echo "WARN: timeoutMs=$TIMEOUT_MS is below the 30-min floor (600000 = 10 minutes, not 60). Raised to $MIN_TIMEOUT_MS." >&2
+  echo "WARN: timeoutMs=$TIMEOUT_MS занижен и поднят до штатных 90 минут. НЕ передавай третий аргумент — дефолт правильный." >&2
   TIMEOUT_MS=$MIN_TIMEOUT_MS
 fi'''
     s = s.replace('TIMEOUT_MS="${3:-5400000}"', guard)
     open('scripts/delegate-to-agent.sh','w').write(s)
     print('Timeout floor patch applied')
 PYEOF
+
+# Patch: background-wait nudge (2026-09-29). An agent that starts its final test
+# run with run_in_background ends the turn "waiting for a notification" that
+# never arrives in a headless delegation; the coordinator then asks for a
+# useless /newchat (Freddie burned ~4h of queue, Kim looped the same day).
+# One automatic in-session nudge finishes the job. Guard: marker function name.
+python3 - << 'PYEOF_BGN'
+s = open('src/orchestrator.ts').read()
+if 'endsWaitingForBackground' not in s:
+    anchor = "// \u2500\u2500 Self-delegation FIFO queue (2026-09-03)"
+    old_call = "      const result = await runQueuedSelfDelegation(async () => {"
+    tail = """      clearTimeout(timer);
+      clearInterval(progressTimer);
+
+      // Save session so Telegram messages can resume it"""
+    i = s.find(anchor)
+    if i >= 0 and old_call in s and tail in s:
+        helper = open('scripts/patches/bg-nudge-helper.ts.txt').read()
+        nudge = open('scripts/patches/bg-nudge-block.ts.txt').read()
+        s = s[:i] + helper + s[i:]
+        s = s.replace(old_call, "      let result = await runQueuedSelfDelegation(async () => {", 1)
+        s = s.replace(tail, """      clearTimeout(timer);
+      clearInterval(progressTimer);
+
+""" + nudge + "      // Save session so Telegram messages can resume it", 1)
+        open('src/orchestrator.ts', 'w').write(s)
+        print('Background-wait nudge patch applied')
+    else:
+        print('WARNING: background-wait anchors not found - vendor changed, patch skipped')
+PYEOF_BGN
