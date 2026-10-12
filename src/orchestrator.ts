@@ -12,6 +12,26 @@ import { boardAddTask, boardCompleteTask, boardFailTask } from './task-board.js'
 import { maybeAutoResetAfterDelegation } from './context-guard.js';
 import { notifyCoordinator } from './coordinator-notify.js';
 
+// ── Background-wait nudge (2026-09-29) ───────────────────────────────
+// An agent that launches its final test run with run_in_background ends the
+// turn with "waiting for the notification" — but in a headless delegation the
+// notification never arrives: the turn is already closed, and the context-guard
+// reset that follows kills the session that was waiting. The coordinator then
+// sees a verdict-less answer and asks for /newchat, which makes it worse (the
+// fresh session inherits the ghost wait via handoff). Freddie 29.09 burned
+// ~4 h of frontend queue this way; Kim looped on it the same day.
+// One automatic in-session nudge closes the loop without human intervention.
+const BACKGROUND_WAIT_RE =
+  /((жду|ожида|дожида|waiting|will wait|i'?ll wait|i will wait)[^.!?\n]{0,120}(фонов|background|уведомл|notification|jest|прогон|regression|test run))|((фонов|background)[^.!?\n]{0,120}(уведом|notify|notification))/i;
+
+/** True when the answer trails off waiting for a background job instead of finishing. */
+function endsWaitingForBackground(text: string | null): boolean {
+  if (!text) return false;
+  const tail = text.slice(-500);
+  if (/(commit|коммит)[^\n]{0,40}`[0-9a-f]{7,}`/i.test(tail)) return false; // already finalized
+  return BACKGROUND_WAIT_RE.test(tail);
+}
+
 // ── Self-delegation FIFO queue (2026-09-03) ──────────────────────────
 // Two concurrent delegations in one agent process stack their memory
 // profiles (a full jest run + a second claude subprocess) and OOM the
@@ -387,7 +407,7 @@ export async function delegateToAgent(
       // queued section: the timeout budget starts when the task actually
       // runs, and the session id reflects any auto-reset done by the
       // previous task.
-      const result = await runQueuedSelfDelegation(async () => {
+      let result = await runQueuedSelfDelegation(async () => {
         const abortCtrl = new AbortController();
         timer = setTimeout(() => abortCtrl.abort(), timeoutMs);
         const existingSessionId = isSelfProcess && chatId ? getSession(chatId, agentId) : undefined;
@@ -403,6 +423,39 @@ export async function delegateToAgent(
 
       clearTimeout(timer);
       clearInterval(progressTimer);
+
+      // Background-wait nudge — see endsWaitingForBackground() above.
+      if (!result.aborted && endsWaitingForBackground(result.text)) {
+        logger.warn({ agentId }, 'Turn ended waiting for a background task — nudging the agent to finish synchronously');
+        onProgress?.(`\u23f3 ${agent.name}: фоновая задача не уведомит — прошу завершить синхронно`);
+        const nudge = [
+          'Твой предыдущий ответ заканчивается ожиданием фоновой задачи.',
+          'В режиме делегации уведомление о её завершении НЕ придёт: ход уже закрыт, ждать нечего.',
+          'Сделай сейчас: (1) забери вывод уже запущенной фоновой команды через BashOutput по её id,',
+          'либо перезапусти проверку СИНХРОННО; (2) доведи задачу до конца — коммит и отчёт.',
+          'Финальный шаг запускать в фоне нельзя.',
+        ].join(' ');
+        try {
+          const retry = await runQueuedSelfDelegation(async () => {
+            const nudgeAbort = new AbortController();
+            const nudgeTimer = setTimeout(() => nudgeAbort.abort(), timeoutMs);
+            try {
+              return await runAgent(nudge, result.newSessionId, () => {}, undefined, agentConfig.model, nudgeAbort);
+            } finally {
+              clearTimeout(nudgeTimer);
+            }
+          });
+          if (retry.text) {
+            result = { ...retry, usage: retry.usage ?? result.usage };
+            logger.info({ agentId }, 'Background-wait nudge produced a final answer');
+          }
+        } catch (nudgeErr) {
+          logger.warn(
+            { agentId, err: nudgeErr instanceof Error ? nudgeErr.message : String(nudgeErr) },
+            'Background-wait nudge failed — returning the original answer',
+          );
+        }
+      }
 
       // Save session so Telegram messages can resume it
       if (isSelfProcess && chatId && result.newSessionId) {
