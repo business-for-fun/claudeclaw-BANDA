@@ -11,6 +11,8 @@ export interface AgentConfig {
   botTokenEnv: string;
   botToken: string;
   model?: string;
+  /** Глубина рассуждения модели (2026-10-12, пилот на freddie). Не задан = дефолт SDK (high). */
+  effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
   skills?: string[];
   dashboardPort?: number;
   obsidian?: {
@@ -62,6 +64,7 @@ export function loadAgentConfig(agentId: string): AgentConfig {
   const description = (raw['description'] as string) ?? '';
   const botTokenEnv = raw['telegram_bot_token_env'] as string;
   const model = raw['model'] as string | undefined;
+  const effort = raw['effort'] as AgentConfig['effort'];
   const skills = (raw['skills'] as string[] | undefined) ?? [];
   const dashboardPort = raw['dashboard_port'] as number | undefined;
 
@@ -85,7 +88,7 @@ export function loadAgentConfig(agentId: string): AgentConfig {
     };
   }
 
-  return { name, description, botTokenEnv, botToken, model, skills, dashboardPort, obsidian };
+  return { name, description, botTokenEnv, botToken, model, effort, skills, dashboardPort, obsidian };
 }
 
 /** List all configured agent IDs (directories under agents/ with agent.yaml).

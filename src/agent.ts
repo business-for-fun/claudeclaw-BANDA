@@ -1,6 +1,6 @@
 import { query } from '@anthropic-ai/claude-agent-sdk';
 
-import { PROJECT_ROOT, agentCwd, agentSystemPrompt } from './config.js';
+import { PROJECT_ROOT, agentCwd, agentSystemPrompt, agentEffort } from './config.js';
 import { readEnvFile } from './env.js';
 import { logger } from './logger.js';
 import type { MessageContent, ContentBlock } from './media.js';
@@ -215,6 +215,12 @@ export async function runAgent(
 
         // Model override (e.g. 'claude-haiku-4-5', 'claude-sonnet-4-5')
         ...(model ? { model } : {}),
+
+        // Глубина рассуждения (2026-10-12). Не задана — работает дефолт SDK
+        // (high): модель думает на максимуме даже над правкой по готовой
+        // карточке. Пилот на freddie: medium. Замер — длительность хода и
+        // возвраты от QA, baseline 12.10: 18.7 мин средний, 8 возвратов/нед.
+        ...(agentEffort ? { effort: agentEffort as 'low' | 'medium' | 'high' | 'xhigh' | 'max' } : {}),
 
         // Abort support — signals the SDK to kill the subprocess
         ...(abortController ? { abortController } : {}),

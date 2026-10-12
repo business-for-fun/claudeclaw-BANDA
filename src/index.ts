@@ -40,6 +40,7 @@ if (AGENT_ID !== 'main') {
     botToken: agentConfig.botToken,
     cwd: agentDir,
     model: agentConfig.model,
+    effort: agentConfig.effort,
     obsidian: agentConfig.obsidian,
     // systemPrompt deliberately NOT passed for sub-agents (2026-09-01): the
     // agent's own CLAUDE.md already loads via settingSources:['project'] from
