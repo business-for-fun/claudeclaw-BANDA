@@ -404,3 +404,38 @@ if 'endsWaitingForBackground' not in s:
     else:
         print('WARNING: background-wait anchors not found - vendor changed, patch skipped')
 PYEOF_BGN
+
+# Patch: per-agent reasoning effort from agent.yaml (2026-10-12). Without it
+# every agent runs at the SDK default (maximum) even on card-driven routine.
+# Guard: absence of the marker name.
+python3 - << 'PYEOF_EFFORT'
+import io
+changed = False
+p='src/config.ts'; s=open(p).read()
+if 'agentEffort' not in s:
+    s = s.replace("export let agentDefaultModel: string | undefined; // from agent.yaml",
+                  "export let agentDefaultModel: string | undefined; // from agent.yaml\nexport let agentEffort: string | undefined;        // from agent.yaml (2026-10-12)", 1)
+    s = s.replace("  model?: string;", "  model?: string;\n  effort?: string;", 1)
+    s = s.replace("  agentDefaultModel = opts.model;", "  agentDefaultModel = opts.model;\n  agentEffort = opts.effort;", 1)
+    open(p,'w').write(s); changed = True
+p='src/agent-config.ts'; s=open(p).read()
+if "raw['effort']" not in s:
+    s = s.replace("  model?: string;", "  model?: string;\n  effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';", 1)
+    s = s.replace("  const model = raw['model'] as string | undefined;",
+                  "  const model = raw['model'] as string | undefined;\n  const effort = raw['effort'] as AgentConfig['effort'];", 1)
+    s = s.replace("return { name, description, botTokenEnv, botToken, model, skills,",
+                  "return { name, description, botTokenEnv, botToken, model, effort, skills,", 1)
+    open(p,'w').write(s); changed = True
+p='src/agent.ts'; s=open(p).read()
+if 'agentEffort' not in s:
+    s = s.replace("import { PROJECT_ROOT, agentCwd, agentSystemPrompt } from './config.js';",
+                  "import { PROJECT_ROOT, agentCwd, agentSystemPrompt, agentEffort } from './config.js';", 1)
+    s = s.replace("        ...(model ? { model } : {}),",
+                  "        ...(model ? { model } : {}),\n        ...(agentEffort ? { effort: agentEffort as 'low' | 'medium' | 'high' | 'xhigh' | 'max' } : {}),", 1)
+    open(p,'w').write(s); changed = True
+p='src/index.ts'; s=open(p).read()
+if 'effort: agentConfig.effort' not in s:
+    s = s.replace("    model: agentConfig.model,", "    model: agentConfig.model,\n    effort: agentConfig.effort,", 1)
+    open(p,'w').write(s); changed = True
+print('Per-agent effort patch applied' if changed else 'effort patch already present')
+PYEOF_EFFORT
