@@ -354,6 +354,12 @@ export async function runAgent(
           { hasResult: !!resultText, subtype: ev['subtype'] },
           'Agent result received',
         );
+        // 2026-10-20: SDK 0.3.284+ keeps the query open after `result` while
+        // background tasks run (to wake a follow-up turn). Our callers expect
+        // one turn per call: Nacho's handler hung 15 min after delegating in
+        // the background, the reply never reached Telegram. Close on result,
+        // as 0.3.263 effectively did.
+        break;
       }
     }
   } catch (err) {
