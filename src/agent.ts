@@ -150,6 +150,11 @@ export async function runAgent(
   const secrets = readEnvFile(['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY']);
 
   const sdkEnv: Record<string, string | undefined> = { ...process.env };
+  // SDK 0.3.302+ turns fork subagents on by default. A fork re-sends the whole
+  // ~300k-token parent context (MAX quota), can run in the background past the
+  // end of the turn (task marked done while work continues), and edits the same
+  // repo in parallel. Off unless an agent's env explicitly sets it.
+  sdkEnv.CLAUDE_CODE_FORK_SUBAGENT = process.env.CLAUDE_CODE_FORK_SUBAGENT ?? '0';
   if (secrets.CLAUDE_CODE_OAUTH_TOKEN) {
     sdkEnv.CLAUDE_CODE_OAUTH_TOKEN = secrets.CLAUDE_CODE_OAUTH_TOKEN;
   }

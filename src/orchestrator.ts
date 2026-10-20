@@ -21,15 +21,20 @@ import { notifyCoordinator } from './coordinator-notify.js';
 // fresh session inherits the ghost wait via handoff). Freddie 29.09 burned
 // ~4 h of frontend queue this way; Kim looped on it the same day.
 // One automatic in-session nudge closes the loop without human intervention.
+// 2026-10-20: second pattern catches "I'll stop/pause here and resume when … finishes"
+// (BUG-20261020-006 sat uncommitted after two such endings). Backtest on 5533
+// completed tasks: +6 matches, all genuine background-wait endings.
 const BACKGROUND_WAIT_RE =
   /((жду|ожида|дожида|waiting|will wait|i'?ll wait|i will wait)[^.!?\n]{0,120}(фонов|background|уведомл|notification|jest|прогон|regression|test run))|((фонов|background)[^.!?\n]{0,120}(уведом|notify|notification))/i;
+const BACKGROUND_RESUME_RE =
+  /((stop|pause)\s+here|остановлюсь|прервусь|ставлю на паузу)[^\n]{0,200}(resume|continue|продолж|вернусь)|(resume|continue|продолжу|вернусь)[^.!?\n]{0,120}(when|once|after|как только|когда|после)[^.!?\n]{0,120}(finish|complete|done|заверш|законч|готов)/i;
 
 /** True when the answer trails off waiting for a background job instead of finishing. */
 function endsWaitingForBackground(text: string | null): boolean {
   if (!text) return false;
   const tail = text.slice(-500);
   if (/(commit|коммит)[^\n]{0,40}`[0-9a-f]{7,}`/i.test(tail)) return false; // already finalized
-  return BACKGROUND_WAIT_RE.test(tail);
+  return BACKGROUND_WAIT_RE.test(tail) || BACKGROUND_RESUME_RE.test(tail);
 }
 
 // ── Self-delegation FIFO queue (2026-09-03) ──────────────────────────
@@ -110,6 +115,17 @@ async function sendAsAgent(botToken: string, chatId: string, text: string): Prom
   } catch (err) {
     logger.warn({ err, chatId }, 'Failed to send agent message to Telegram');
   }
+}
+
+/**
+ * Service notices (👋 task received / ✅ task completed / 🔄 session reset)
+ * go only to group chats. 2026-10-20: delegations without a project defaulted
+ * to Alex's private chat, so every agent's bot kept posting these into his DMs.
+ * Group chat ids are negative; private chat ids are positive.
+ */
+function sendAgentNotice(botToken: string, chatId: string, text: string): Promise<void> {
+  if (!String(chatId).startsWith('-')) return Promise.resolve();
+  return sendAsAgent(botToken, chatId, text);
 }
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -319,7 +335,7 @@ export async function delegateToAgent(
   const agentConfig = loadAgentConfig(agentId);
   if (agentConfig.botToken) {
     const senderName = fromAgent === 'main' ? 'Начо' : fromAgent;
-    void sendAsAgent(
+    void sendAgentNotice(
       agentConfig.botToken,
       chatId,
       `👋 Task received from ${senderName}: ${taskPreview}`,
@@ -345,7 +361,7 @@ export async function delegateToAgent(
       onProgress?.(`✅ ${agent.name} завершил задачу (${Math.round(durationMs / 1000)}с)`);
       if (agentConfig.botToken) {
         const senderName = fromAgent === 'main' ? 'Начо' : fromAgent;
-        void sendAsAgent(agentConfig.botToken, chatId,
+        void sendAgentNotice(agentConfig.botToken, chatId,
           `✅ Task completed! Sending result → ${senderName}`);
       }
       return { agentId, text: remoteResult.text, usage: remoteResult.usage, taskId, durationMs };
@@ -468,7 +484,7 @@ export async function delegateToAgent(
       if (isSelfProcess && chatId && result.usage) {
         const wasReset = await maybeAutoResetAfterDelegation(chatId, result.usage);
         if (wasReset && agentConfig.botToken) {
-          void sendAsAgent(
+          void sendAgentNotice(
             agentConfig.botToken,
             chatId,
             `🔄 [${agent.name}] сессия сброшена автоматически после задачи (контекст переполнен). Handoff сохранён — следующая задача начнёт свежую сессию.`,
@@ -503,7 +519,7 @@ export async function delegateToAgent(
       // Send "task done" message FROM the agent's own bot to user
       if (agentConfig.botToken) {
         const senderName = fromAgent === 'main' ? 'Начо' : fromAgent;
-        void sendAsAgent(
+        void sendAgentNotice(
           agentConfig.botToken,
           chatId,
           `✅ Task completed! Sending result → ${senderName}`,
