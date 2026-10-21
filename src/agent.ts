@@ -1,4 +1,5 @@
 import { query } from '@anthropic-ai/claude-agent-sdk';
+import { randomUUID } from 'node:crypto';
 
 import { PROJECT_ROOT, agentCwd, agentSystemPrompt, agentEffort } from './config.js';
 import { readEnvFile } from './env.js';
@@ -106,17 +107,19 @@ export interface AgentResult {
  * `content` can be a plain string or an array of ContentBlock (text + image)
  * for vision messages. The SDK/Messages API accepts both forms natively.
  */
-async function* singleTurn(content: string | ContentBlock[]): AsyncGenerator<{
+async function* singleTurn(content: string | ContentBlock[], uuid?: string): AsyncGenerator<{
   type: 'user';
   message: { role: 'user'; content: string | ContentBlock[] };
   parent_tool_use_id: null;
   session_id: string;
+  uuid?: `${string}-${string}-${string}-${string}-${string}`;
 }> {
   yield {
     type: 'user',
     message: { role: 'user', content },
     parent_tool_use_id: null,
     session_id: '',
+    ...(uuid ? { uuid: uuid as `${string}-${string}-${string}-${string}-${string}` } : {}),
   };
 }
 
@@ -163,6 +166,9 @@ export async function runAgent(
   }
 
   let newSessionId: string | undefined;
+  // Tags our prompt so its own `result` can be told apart from results of
+  // queued leftovers (e.g. a stale background-task notification) — see below.
+  const promptUuid = randomUUID();
   let resultText: string | null = null;
   let usage: UsageInfo | null = null;
   let didCompact = false;
@@ -189,7 +195,7 @@ export async function runAgent(
     );
 
     for await (const event of query({
-      prompt: singleTurn(message),
+      prompt: singleTurn(message, promptUuid),
       options: {
         // cwd = agent directory (if running as agent) or project root.
         // Claude Code loads CLAUDE.md from cwd via settingSources: ['project'].
@@ -322,6 +328,18 @@ export async function runAgent(
       }
 
       if (ev['type'] === 'result') {
+        // 2026-10-21: after a session closed with background tasks still
+        // running, the next resume first answers their stale notifications
+        // ("stopped") — a separate turn with its own result. Breaking on that
+        // one cut Nacho's real turn to a bare "Done." Only our prompt's result
+        // counts; producers without uuids (older CLI, failed delivery) are ours.
+        const ids = (ev['user_message_uuids'] as string[] | undefined)
+          ?? (ev['user_message_uuid'] ? [ev['user_message_uuid'] as string] : undefined);
+        const isError = String(ev['subtype'] ?? '').startsWith('error');
+        if (ids ? !ids.includes(promptUuid) : (!isError && !ev['result'] && ev['num_turns'] === 0)) {
+          logger.info({ subtype: ev['subtype'], ids, numTurns: ev['num_turns'] }, 'Skipping result of a queued non-prompt turn');
+          continue;
+        }
         resultText = (ev['result'] as string | null | undefined) ?? null;
 
         // Extract usage info from result event
