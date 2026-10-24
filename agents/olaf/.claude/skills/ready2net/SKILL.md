@@ -28,6 +28,8 @@ description: Ready2net (r2n) — стенд dev2.ready2net.online и конве�
 | Фронтенд | `frontend/` (на dev2 — собранный бандл `vite build --mode r2n`, НЕ Vite HMR) |
 | Исполнитель r2n (сервер, хаб, импорт, площадка) | репозиторий `ready2net` — **среда, команда не правит** |
 
+- **Куда НЕ коммитить** (pre-commit отклонит): `workflows/` (экспорты n8n), корневые `R4G_*.json`/`ml_workflow_*.json`, `staticdata-backups/`, `frontend_orig/`. Правка там никуда не попадает.
+
 **Конвейер** — `projects/r4g/WORKFLOW.md`, раздел «Ready2net (r2n) — конвейер»: [2] fix → [2r] бэкенд на dev2
 (Olaf, `tools/r2n-deploy-dev2.sh`) / [2f] фронтенд на dev2 (Olaf, `tools/r2n-deploy-dev2.sh --frontend`) → [3] Kim
 на dev2 → [4] sign-off → [5] прод ЗАМОРОЖЕН. Статус карточки `n8n-sync` теперь означает «ждёт выкладки [2r]/[2f]».

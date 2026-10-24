@@ -370,7 +370,7 @@ commit_workflows() {
       log "Git ($label): ERROR git add failed"
       return
     fi
-    git commit -m "backup: $label n8n workflows export $(date '+%Y-%m-%d %H:%M UTC')
+    R4G_ALLOW_N8N_EXPORT=1 git commit -m "backup: $label n8n workflows export $(date '+%Y-%m-%d %H:%M UTC')
 
 Auto-exported $count workflow(s) from n8n servers.
 " || log "Git ($label): commit failed (permissions or no changes)"
