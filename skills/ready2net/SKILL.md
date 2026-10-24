@@ -65,4 +65,6 @@ description: Ready2net (r2n) — стенд dev2.ready2net.online и конве�
 - После каждого сценария удалить то, что создала (Rule 12): стенд общий с Валерой.
 - «Timeout», «server did not confirm», «unreachable» на dev2 — не баг нагрузки (её нет), а проблема среды: правило 5,
   в карточку — факты и стоп.
+- Трейдером входить только QA-персоной с паролем (`password_regenerate` через identity API с `R4G_ADMIN_KEY`,
+  персоны `kimqa-feat*@banda.local` или свои одноразовые); живых трейдеров и их magic-link не трогать — письма на dev2 не уходят.
 - Прод-смоук (Rule 11) без изменений: ready2net.online остаётся на n8n до переезда.
