@@ -372,6 +372,20 @@ export async function runAgent(
           { hasResult: !!resultText, subtype: ev['subtype'] },
           'Agent result received',
         );
+        // 2026-11-08: with SDK 0.3.319 (CLI 2.1.319) a transcript rotated away by
+        // Claude Code's 30-day cleanup is reported as a RESULT event (subtype
+        // error_during_execution, no system/init before it), not as a thrown
+        // "No conversation found with session ID" — so the 2026-09-04 self-heal
+        // in the catch below never saw it and Telegram got an "empty reply" in
+        // <1 s (Alex's DM chat: gale/kim/olaf pointers from September). Same
+        // class, same cure: error result on a resumed session that never
+        // initialised ⇒ dead pointer ⇒ retry once with a fresh session; the
+        // caller saves result.newSessionId over the dead row.
+        if (isError && sessionId && !newSessionId) {
+          logger.warn({ sessionId, subtype: ev['subtype'] }, 'Dead session pointer (error result before init) — retrying with a fresh session');
+          const fresh = await runAgent(message, undefined, onTyping, onProgress, model, abortController);
+          return { ...fresh, sessionRecovered: true };
+        }
         // 2026-10-20: SDK 0.3.284+ keeps the query open after `result` while
         // background tasks run (to wake a follow-up turn). Our callers expect
         // one turn per call: Nacho's handler hung 15 min after delegating in
